@@ -43,6 +43,20 @@ export class SteelSpecificationService {
 
   async update(id: number, updateSteelSpecificationDto: UpdateSteelSpecificationDto): Promise<SteelSpecification> {
     const steelSpecification = await this.findOne(id);
+
+    // Check for duplicates if steelSpecName is being updated
+    if (updateSteelSpecificationDto.steelSpecName) {
+      const existing = await this.steelSpecificationRepository.findOneBy({
+        steelSpecName: updateSteelSpecificationDto.steelSpecName,
+      });
+
+      if (existing && existing.id !== id) {
+        throw new BadRequestException(
+          `Steel specification with name "${updateSteelSpecificationDto.steelSpecName}" already exists`,
+        );
+      }
+    }
+
     Object.assign(steelSpecification, updateSteelSpecificationDto);
     return this.steelSpecificationRepository.save(steelSpecification);
   }
