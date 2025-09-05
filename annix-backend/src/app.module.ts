@@ -1,20 +1,18 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
-import typeorm from './config/typeorm';
+import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { SteelSpecificationModule } from './steel-specification/steel-specification.module';
+import typeormConfig from './config/typeorm';
 
 @Module({
   imports: [
-    // ConfigModule.forRoot({
-    //   isGlobal: true,
-    //   load: [typeorm]
-    // }),
-    // TypeOrmModule.forRootAsync({
-    //   inject: [ConfigService],
-    //   useFactory: (configService: ConfigService): TypeOrmModuleOptions => (configService.get<TypeOrmModuleOptions>('typeorm')!)
-    // }),
+    ConfigModule.forRoot({ isGlobal: true }),
+    TypeOrmModule.forRoot({
+      ...typeormConfig(),
+    }),
+    SteelSpecificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
