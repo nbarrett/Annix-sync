@@ -29,7 +29,8 @@ export class NominalOutsideDiameterMmService {
   }
 
   findAll() {
-    return this.repository.find();
+    // return this.repository.find();
+    return this.repository.find({ relations: ['pipeDimensions'] });
   }
 
   async findOne(id: number) {
@@ -41,7 +42,6 @@ export class NominalOutsideDiameterMmService {
   async update(id: number, updateNominalOutsideDiameterMmDto: UpdateNominalOutsideDiameterMmDto) {
     const entity = await this.findOne(id);
 
-    // Optional duplicate check if both fields are provided
     if (updateNominalOutsideDiameterMmDto.nominal_diameter_mm && updateNominalOutsideDiameterMmDto.outside_diameter_mm) {
       const exists = await this.repository.findOneBy({
         nominal_diameter_mm: updateNominalOutsideDiameterMmDto.nominal_diameter_mm,
@@ -64,4 +64,27 @@ export class NominalOutsideDiameterMmService {
     if (result.affected === 0) 
       throw new NotFoundException(`NominalOutsideDiameter #${id} not found`);
   }
+
+  // nominal-outside-diameter-mm.service.ts
+  // async findAllWithDimensionsAndPressures(): Promise<NominalOutsideDiameterMm[]> {
+  //   const entity = await this.repository.find({
+  //     relations: ['pipeDimensions', 'pipeDimensions.pressures'],
+  //   });
+
+  //   return entity;
+  // }
+
+  // async findOneWithDimensionsAndPressures(id: number): Promise<NominalOutsideDiameterMm> {
+  //   const entity = await this.repository.findOne({
+  //     where: { id },
+  //     relations: ['pipeDimensions', 'pipeDimensions.pressures'],
+  //   });
+
+  //   if (!entity) {
+  //     throw new NotFoundException(`NominalOutsideDiameterMm #${id} not found`);
+  //   }
+
+  //   return entity;
+  // }
+
 }

@@ -10,7 +10,7 @@ export class AuthController {
 
   @Post('login')
   @ApiOperation({ summary: 'Login and get JWT token' })
-  @ApiResponse({ status: 200, description: 'JWT access token returned' })
+  @ApiResponse({ status: 201, description: 'JWT access token returned' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Body() loginUserDto: LoginUserDto) {
     const user = await this.authService.validateUser(
