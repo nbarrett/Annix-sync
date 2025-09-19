@@ -8,6 +8,8 @@ import { NominalOutsideDiameterMmModule } from './nominal-outside-diameter-mm/no
 import { UserModule } from './user/user.module';
 import { UserRolesModule } from './user-roles/user-roles.module';
 import { AuthModule } from './auth/auth.module';
+import { PipeDimensionModule } from './pipe-dimension/pipe-dimension.module';
+import { PipePressureModule } from './pipe-pressure/pipe-pressure.module';
 import typeormConfig from './config/typeorm';
 
 @Module({
@@ -21,6 +23,8 @@ import typeormConfig from './config/typeorm';
     UserModule,
     UserRolesModule,
     AuthModule,
+    PipeDimensionModule,
+    PipePressureModule,
   ],
   controllers: [AppController],
   providers: [AppService],
