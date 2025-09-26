@@ -22,6 +22,10 @@ import { BoltModule } from './bolt/bolt.module';
 import { BoltMassModule } from './bolt-mass/bolt-mass.module';
 import { FlangeDimensionModule } from './flange-dimension/flange-dimension.module';
 import { NutMassModule } from './nut-mass/nut-mass.module';
+import { NbNpsLookupModule } from './nb-nps-lookup/nb-nps-lookup.module';
+import { BendDimensionService } from './bend-dimension/bend-dimension.service';
+import { BendDimensionController } from './bend-dimension/bend-dimension.controller';
+import { BendDimensionModule } from './bend-dimension/bend-dimension.module';
 import typeormConfig from './config/typeorm';
 
 @Module({
@@ -49,8 +53,10 @@ import typeormConfig from './config/typeorm';
     BoltMassModule,
     FlangeDimensionModule,
     NutMassModule,
+    NbNpsLookupModule,
+    BendDimensionModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [AppController, BendDimensionController],
+  providers: [AppService, BendDimensionService],
 })
 export class AppModule {}
