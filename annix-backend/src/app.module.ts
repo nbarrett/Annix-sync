@@ -10,6 +10,12 @@ import { UserRolesModule } from './user-roles/user-roles.module';
 import { AuthModule } from './auth/auth.module';
 import { PipeDimensionModule } from './pipe-dimension/pipe-dimension.module';
 import { PipePressureModule } from './pipe-pressure/pipe-pressure.module';
+import { AngleRangeModule } from './angle-range/angle-range.module';
+import { FittingModule } from './fitting/fitting.module';
+import { FittingBoreModule } from './fitting-bore/fitting-bore.module';
+import { FittingDimensionModule } from './fitting-dimension/fitting-dimension.module';
+import { FittingTypeModule } from './fitting-type/fitting-type.module';
+import { FittingVariantModule } from './fitting-variant/fitting-variant.module';
 import typeormConfig from './config/typeorm';
 
 @Module({
@@ -25,6 +31,12 @@ import typeormConfig from './config/typeorm';
     AuthModule,
     PipeDimensionModule,
     PipePressureModule,
+    AngleRangeModule,
+    FittingModule,
+    FittingBoreModule,
+    FittingDimensionModule,
+    FittingTypeModule,
+    FittingVariantModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -14,8 +14,8 @@ export class PipeDimensionController {
   @ApiBody({ type: CreatePipeDimensionDto})
   @ApiResponse({ status: 201, description: 'Successfully created' })
   @ApiResponse({ status: 400, description: 'Duplicate or invalid data' })
-  async create(@Param('nominalId', ParseIntPipe) nominalId: number, @Body() createPipeDimensionDto: CreatePipeDimensionDto,) {
-    return this.pipeDimensionService.create(nominalId, createPipeDimensionDto);
+  async create(/*@Param('nominalId', ParseIntPipe) nominalId: number,*/ @Body() createPipeDimensionDto: CreatePipeDimensionDto,) {
+    return this.pipeDimensionService.create(/*nominalId,*/ createPipeDimensionDto);
   }
 
   @Get()

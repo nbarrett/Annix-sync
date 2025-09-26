@@ -45,4 +45,14 @@ export class CreatePipeDimensionDto {
   @IsOptional()
   @IsNumber()
   schedule_number?: number;
+
+  @ApiProperty({ description: 'SteelSpecification ID' })
+  @IsNumber()
+  @IsNotEmpty()
+  steelSpecificationId: number;
+
+  @ApiProperty({ description: 'nominalOutsideDiameter ID' })
+  @IsNumber()
+  @IsNotEmpty()
+  nominalOutsideDiameterId: number;
 }

@@ -1,3 +1,4 @@
+import { FittingBore } from 'src/fitting-bore/entities/fitting-bore.entity';
 import { PipeDimension } from '../../pipe-dimension/entities/pipe-dimension.entity';
 import { Entity, PrimaryGeneratedColumn, Column, Unique, OneToMany } from 'typeorm';
 
@@ -17,4 +18,7 @@ export class NominalOutsideDiameterMm {
     cascade: true,
   })
   pipeDimensions: PipeDimension[];
+
+  @OneToMany(() => FittingBore, (bore) => bore.nominalOutsideDiameter)
+  fittingBores: FittingBore[];
 }
