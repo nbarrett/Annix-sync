@@ -16,8 +16,9 @@ export class CreateFittingVariantDto {
   })
   @IsArray()
   @ValidateNested({ each: true })
+  @IsOptional()
   @Type(() => CreateFittingBoreDto)
-  bores: CreateFittingBoreDto[];
+  bores?: CreateFittingBoreDto[];
 
   @ApiProperty({
     type: [CreateFittingDimensionDto],

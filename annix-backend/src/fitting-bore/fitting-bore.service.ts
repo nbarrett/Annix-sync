@@ -57,7 +57,7 @@ export class FittingBoreService {
     });
     if (existing) throw new BadRequestException(`Bore position "${dto.borePosition}" already exists for this variant`);
 
-    const bore = this.boreRepo.create({ variant, nominalOutsideDiameter: nominal, ...dto });
+    const bore = this.boreRepo.create({ variant, nominalOutsideDiameter: nominal, borePositionName: dto.borePosition });
     return this.boreRepo.save(bore);
   }
 

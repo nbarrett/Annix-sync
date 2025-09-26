@@ -54,7 +54,14 @@ export class FittingDimensionService {
       if (!angleRange) throw new NotFoundException(`AngleRange ${dto.angleRangeId} not found`);
     }
 
-    const dim = this.dimRepo.create({ variant, angleRange, ...dto });
+    // const dim = this.dimRepo.create({ variant, angleRange, ...dto });
+    // return this.dimRepo.save(dim);
+    const dim = this.dimRepo.create({
+      dimension_name: dto.dimensionName,
+      dimension_value_mm: dto.dimensionValueMm,
+      variant,                   // entity
+      angleRange,                // entity or null
+    });
     return this.dimRepo.save(dim);
   }
 
