@@ -37,7 +37,7 @@ export class FittingDimensionController {
   @ApiOperation({ summary: 'Update a fitting dimension' })
   @ApiResponse({ status: 200, description: 'Fitting dimension updated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request or duplicate fitting dimension' })
-  @ApiResponse({ status: 404, description: 'itting dimension not found' })
+  @ApiResponse({ status: 404, description: 'Fitting dimension not found' })
   update(@Param('id') id: string, @Body() updateFittingDimensionDto: UpdateFittingDimensionDto) {
     return this.fittingDimensionService.update(+id, updateFittingDimensionDto);
   }

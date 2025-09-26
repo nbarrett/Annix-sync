@@ -39,16 +39,15 @@ export class AngleRangeService {
   ) {}
 
   async create(dto: CreateAngleRangeDto): Promise<AngleRange> {
-    // Optional: check overlapping ranges
-    const existing = await this.rangeRepo
-      .createQueryBuilder('range')
-      .where('range.angleMin <= :max AND range.angleMax >= :min', { min: dto.angle_min, max: dto.angle_max })
-      .getOne();
+    const exists = await this.rangeRepo.findOne({ where: { angle_min: dto.angle_min, angle_max: dto.angle_max } });
+    if (exists) {
+      throw new BadRequestException(
+        `AngleRange with min ${dto.angle_min}° and max ${dto.angle_max}° already exists`,
+      );
+    }
 
-    if (existing) throw new BadRequestException('Angle range overlaps with existing range');
-
-    const range = this.rangeRepo.create(dto);
-    return this.rangeRepo.save(range);
+    const entity = this.rangeRepo.create(dto);
+    return this.rangeRepo.save(entity);
   }
 
   async findAll(): Promise<AngleRange[]> {

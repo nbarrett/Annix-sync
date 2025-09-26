@@ -16,6 +16,12 @@ import { FittingBoreModule } from './fitting-bore/fitting-bore.module';
 import { FittingDimensionModule } from './fitting-dimension/fitting-dimension.module';
 import { FittingTypeModule } from './fitting-type/fitting-type.module';
 import { FittingVariantModule } from './fitting-variant/fitting-variant.module';
+import { FlangeStandardModule } from './flange-standard/flange-standard.module';
+import { FlangePressureClassModule } from './flange-pressure-class/flange-pressure-class.module';
+import { BoltModule } from './bolt/bolt.module';
+import { BoltMassModule } from './bolt-mass/bolt-mass.module';
+import { FlangeDimensionModule } from './flange-dimension/flange-dimension.module';
+import { NutMassModule } from './nut-mass/nut-mass.module';
 import typeormConfig from './config/typeorm';
 
 @Module({
@@ -37,6 +43,12 @@ import typeormConfig from './config/typeorm';
     FittingDimensionModule,
     FittingTypeModule,
     FittingVariantModule,
+    FlangeStandardModule,
+    FlangePressureClassModule,
+    BoltModule,
+    BoltMassModule,
+    FlangeDimensionModule,
+    NutMassModule,
   ],
   controllers: [AppController],
   providers: [AppService],
