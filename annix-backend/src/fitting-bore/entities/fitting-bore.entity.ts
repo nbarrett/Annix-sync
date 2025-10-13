@@ -1,8 +1,8 @@
 // export class FittingBore {}
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
-import { Fitting } from 'src/fitting/entities/fitting.entity';
-import { NominalOutsideDiameterMm } from 'src/nominal-outside-diameter-mm/entities/nominal-outside-diameter-mm.entity';
-import { FittingVariant } from 'src/fitting-variant/entities/fitting-variant.entity';
+import { Fitting } from '../../fitting/entities/fitting.entity';
+import { NominalOutsideDiameterMm } from '../../nominal-outside-diameter-mm/entities/nominal-outside-diameter-mm.entity';
+import { FittingVariant } from '../../fitting-variant/entities/fitting-variant.entity';
 
 @Entity('fitting_bores')
 export class FittingBore {

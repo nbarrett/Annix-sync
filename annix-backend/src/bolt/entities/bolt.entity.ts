@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { BoltMass } from '../../bolt-mass/entities/bolt-mass.entity';
-import { NutMass } from 'src/nut-mass/entities/nut-mass.entity';
+import { NutMass } from '../../nut-mass/entities/nut-mass.entity';
 
 @Entity('bolts')
 export class Bolt {

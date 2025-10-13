@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, Unique, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
-import { Bolt } from 'src/bolt/entities/bolt.entity';
+import { Bolt } from '../../bolt/entities/bolt.entity';
 
 @Entity('nut_masses')
 // @Unique(['size', 'bolt'])

@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { AngleRange } from '../../angle-range/entities/angle-range.entity';
-import { FittingVariant } from 'src/fitting-variant/entities/fitting-variant.entity';
+import { FittingVariant } from '../../fitting-variant/entities/fitting-variant.entity';
 
 @Entity('fitting_dimensions')
 export class FittingDimension {

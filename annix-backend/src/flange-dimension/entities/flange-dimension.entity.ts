@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
-import { NominalOutsideDiameterMm } from 'src/nominal-outside-diameter-mm/entities/nominal-outside-diameter-mm.entity';
+import { NominalOutsideDiameterMm } from '../../nominal-outside-diameter-mm/entities/nominal-outside-diameter-mm.entity';
 import { FlangeStandard } from '../../flange-standard/entities/flange-standard.entity';
-import { FlangePressureClass } from 'src/flange-pressure-class/entities/flange-pressure-class.entity';
+import { FlangePressureClass } from '../../flange-pressure-class/entities/flange-pressure-class.entity';
 import { Bolt } from '../../bolt/entities/bolt.entity';
 
 @Entity('flange_dimensions')
