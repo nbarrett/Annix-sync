@@ -1,6 +1,6 @@
-import { FittingBore } from "src/fitting-bore/entities/fitting-bore.entity";
-import { FittingDimension } from "src/fitting-dimension/entities/fitting-dimension.entity";
-import { Fitting } from "src/fitting/entities/fitting.entity";
+import { FittingBore } from "../../fitting-bore/entities/fitting-bore.entity";
+import { FittingDimension } from "../../fitting-dimension/entities/fitting-dimension.entity";
+import { Fitting } from "../../fitting/entities/fitting.entity";
 import { Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 
 @Entity('fitting_variants')

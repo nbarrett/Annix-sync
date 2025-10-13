@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { SteelSpecification } from '../../steel-specification/entities/steel-specification.entity';
 import { FittingType } from '../../fitting-type/entities/fitting-type.entity';
-import { FittingVariant } from 'src/fitting-variant/entities/fitting-variant.entity';
+import { FittingVariant } from '../../fitting-variant/entities/fitting-variant.entity';
 
 @Entity('fittings')
 export class Fitting {

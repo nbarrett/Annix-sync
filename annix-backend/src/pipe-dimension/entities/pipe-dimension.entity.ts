@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { NominalOutsideDiameterMm } from '../../nominal-outside-diameter-mm/entities/nominal-outside-diameter-mm.entity';
-import { PipePressure } from 'src/pipe-pressure/entities/pipe-pressure.entity';
-import { SteelSpecification } from 'src/steel-specification/entities/steel-specification.entity';
+import { PipePressure } from '../../pipe-pressure/entities/pipe-pressure.entity';
+import { SteelSpecification } from '../../steel-specification/entities/steel-specification.entity';
 
 @Entity('pipe_dimensions')
 export class PipeDimension {

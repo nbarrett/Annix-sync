@@ -1,5 +1,5 @@
-import { Fitting } from 'src/fitting/entities/fitting.entity';
-import { PipeDimension } from 'src/pipe-dimension/entities/pipe-dimension.entity';
+import { Fitting } from '../../fitting/entities/fitting.entity';
+import { PipeDimension } from '../../pipe-dimension/entities/pipe-dimension.entity';
 import { Entity, PrimaryGeneratedColumn, Column, Unique, OneToMany } from 'typeorm';
 
 @Entity('steel_specifications')
