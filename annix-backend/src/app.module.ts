@@ -32,9 +32,7 @@ import typeormConfig from './config/typeorm';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    TypeOrmModule.forRoot({
-      ...typeormConfig(),
-    }),
+    TypeOrmModule.forRoot(typeormConfig()),
     SteelSpecificationModule,
     NominalOutsideDiameterMmModule,
     UserModule,
