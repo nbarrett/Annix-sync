@@ -19,11 +19,11 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "typeorm": "ts-node ./node_modules/typeorm/cli",
-    "migration:run": "yarn typeorm -d ./src/config/typeorm.ts migration:run",
-    "migration:generate": "yarn typeorm -d ./src/config/typeorm.ts migration:generate ./src/migrations/Annix",
+    "migration:run": "yarn typeorm -d ./src/config/data-source.ts migration:run",
+    "migration:generate": "yarn typeorm -d ./src/config/data-source.ts migration:generate ./src/migrations/InitialSchema",
     "migration:create": "yarn typeorm migration:create ./src/migrations/",
     "migration:create:named": "yarn typeorm migration:create ./src/migrations/",
-    "migration:revert": "yarn typeorm -d ./src/config/typeorm.ts migration:revert"
+    "migration:revert": "yarn typeorm -d ./src/config/data-source.ts migration:revert"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
