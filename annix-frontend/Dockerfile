@@ -1,6 +1,5 @@
-# syntax=docker.io/docker/dockerfile:1
-
-FROM node:20-alpine AS base
+# syntax=docker/dockerfile:1
+FROM node:24-alpine AS base
 WORKDIR /app
 
 # ---------- deps ----------

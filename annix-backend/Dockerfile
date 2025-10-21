@@ -1,13 +1,29 @@
-# Dockerfile
-FROM gillesteuwen/tinytex-node20:amd64
-
-USER root
-RUN apt-get update && apt-get install -y libpq-dev
+# ---- Builder stage ----
+FROM node:24-slim AS builder
 
 WORKDIR /usr/src/app
-COPY yarn.lock package.json ./
-RUN yarn install
+
+# Install only prod tools needed for build
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile
+
+# Copy and build
 COPY . .
+RUN yarn build
+
+# ---- Runtime stage ----
+FROM node:24-slim AS runner
+
+WORKDIR /usr/src/app
+
+# Copy only necessary runtime files
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile --production
+
+# Copy built app from builder
+COPY --from=builder /usr/src/app/dist ./dist
+COPY --from=builder /usr/src/app/src/config/data-source.ts ./src/config/data-source.ts
 
 EXPOSE 4000
-CMD ["yarn", "start"]
+
+CMD ["sh", "-c", "yarn migration:run && node dist/main"]
