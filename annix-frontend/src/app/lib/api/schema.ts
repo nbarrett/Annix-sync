@@ -808,6 +808,111 @@ export interface paths {
         patch: operations["WeldTypeController_update"];
         trace?: never;
     };
+    "/rfq/straight-pipe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create RFQ for straight pipe
+         * @description Create a new RFQ for straight pipe fabrication.
+         *
+         *         This endpoint handles the calculation of:
+         *         - Pipe weight using formula: ((OD-WT)*WT)*0.02466 = Kg/m
+         *         - Total quantity requirements
+         *         - Welding requirements (butt welds, flange welds)
+         *         - Material specifications
+         *
+         *         Example from client: "Customer requires 500NB pipe for a 10bar pipeline"
+         *         Input: SANS 719>500>Sch20>12.192>8000m>1000/3
+         */
+        post: operations["RfqController_createStraightPipeRfq"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rfq/straight-pipe/calculate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calculate straight pipe requirements
+         * @description Calculate pipe weight, quantities, and welding requirements without creating an RFQ.
+         *
+         *         Useful for getting estimates before submitting a formal RFQ.
+         */
+        post: operations["RfqController_calculateStraightPipeRequirements"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rfq": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get all RFQs */
+        get: operations["RfqController_getAllRfqs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rfq/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get RFQ by ID */
+        get: operations["RfqController_getRfqById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rfq/straight-pipe/{id}/recalculate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recalculate straight pipe RFQ
+         * @description Recalculate weights and requirements for an existing straight pipe RFQ
+         */
+        post: operations["RfqController_recalculateStraightPipeRfq"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1473,6 +1578,189 @@ export interface components {
              * @example Flange Weld Pipes (Over 2.5m)
              */
             description?: string;
+        };
+        CreateRfqDto: {
+            /**
+             * @description Project name
+             * @example 10 Bar Pipeline Project
+             */
+            project_name: string;
+            /** @description Project description */
+            description?: string;
+            /**
+             * @description Required completion date
+             * @example 2024-12-31
+             */
+            required_date?: string;
+            /** @description Customer name */
+            customer_name?: string;
+            /** @description Customer email */
+            customer_email?: string;
+            /** @description Customer phone number */
+            customer_phone?: string;
+            /** @description Additional notes */
+            notes?: string;
+        };
+        CreateStraightPipeRfqDto: {
+            /**
+             * @description Nominal bore in millimeters
+             * @example 500
+             */
+            nominal_bore_mm: number;
+            /**
+             * @description Type of pipe schedule specification
+             * @enum {string}
+             */
+            schedule_type: "schedule" | "wall_thickness";
+            /**
+             * @description Schedule number (e.g., Sch20, Sch40)
+             * @example Sch20
+             */
+            schedule_number?: string;
+            /**
+             * @description Wall thickness in millimeters
+             * @example 15.09
+             */
+            wall_thickness_mm?: number;
+            /**
+             * @description Length of individual pipe in specified unit
+             * @example 12.192
+             */
+            individual_pipe_length: number;
+            /**
+             * @description Unit for pipe length
+             * @enum {string}
+             */
+            length_unit: "meters" | "feet";
+            /**
+             * @description How quantity is specified
+             * @enum {string}
+             */
+            quantity_type: "total_length" | "number_of_pipes";
+            /**
+             * @description Quantity value - either total meters or number of pipes
+             * @example 8000
+             */
+            quantity_value: number;
+            /**
+             * @description Working pressure in bar
+             * @example 10
+             */
+            working_pressure_bar: number;
+            /**
+             * @description Working temperature in Celsius
+             * @example 120
+             */
+            working_temperature_c?: number;
+            /** @description Steel specification ID */
+            steel_specification_id?: number;
+            /** @description Nominal outside diameter ID */
+            nominal_outside_diameter_id?: number;
+            /** @description Flange standard ID */
+            flange_standard_id?: number;
+            /** @description Flange pressure class ID */
+            flange_pressure_class_id?: number;
+        };
+        CreateStraightPipeRfqWithItemDto: {
+            rfq: components["schemas"]["CreateRfqDto"];
+            straight_pipe: components["schemas"]["CreateStraightPipeRfqDto"];
+            /**
+             * @description Item description
+             * @example 500NB Sch20 Straight Pipe for 10 Bar Pipeline
+             */
+            item_description: string;
+            /** @description Additional notes for this item */
+            item_notes?: string;
+        };
+        StraightPipeCalculationResultDto: {
+            /** @description Weight per meter of pipe in kg/m */
+            pipe_weight_per_meter: number;
+            /** @description Total weight of all pipes in kg */
+            total_pipe_weight: number;
+            /** @description Number of individual pipes needed */
+            calculated_pipe_count: number;
+            /** @description Total length of all pipes in meters */
+            calculated_total_length: number;
+            /** @description Number of flanges required */
+            number_of_flanges: number;
+            /** @description Number of butt welds required */
+            number_of_butt_welds: number;
+            /** @description Total length of butt welds in linear meters */
+            total_butt_weld_length: number;
+            /** @description Number of flange welds required */
+            number_of_flange_welds: number;
+            /** @description Total length of flange welds in linear meters */
+            total_flange_weld_length: number;
+            /** @description Outside diameter used in calculations */
+            outside_diameter_mm?: number;
+            /** @description Wall thickness used in calculations */
+            wall_thickness_mm?: number;
+        };
+        StraightPipeRfqResponseDto: {
+            id: number;
+            nominal_bore_mm: number;
+            /** @enum {string} */
+            schedule_type: "schedule" | "wall_thickness";
+            schedule_number?: string;
+            wall_thickness_mm?: number;
+            individual_pipe_length: number;
+            /** @enum {string} */
+            length_unit: "meters" | "feet";
+            /** @enum {string} */
+            quantity_type: "total_length" | "number_of_pipes";
+            quantity_value: number;
+            working_pressure_bar: number;
+            working_temperature_c?: number;
+            calculations?: components["schemas"]["StraightPipeCalculationResultDto"];
+            steel_specification_id?: number;
+            steel_specification_name?: string;
+            flange_standard_id?: number;
+            flange_standard_code?: string;
+            flange_pressure_class_id?: number;
+            flange_pressure_class_designation?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RfqItemResponseDto: {
+            id: number;
+            line_number: number;
+            item_type: string;
+            description: string;
+            quantity: number;
+            unit_weight_kg?: number;
+            total_weight_kg?: number;
+            unit_price?: number;
+            total_price?: number;
+            notes?: string;
+            straight_pipe_specs?: components["schemas"]["StraightPipeRfqResponseDto"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RfqResponseDto: {
+            id: number;
+            rfq_number: string;
+            project_name: string;
+            description?: string;
+            /** @enum {string} */
+            status: "draft" | "submitted" | "in_review" | "quoted" | "accepted" | "rejected";
+            total_estimated_weight?: number;
+            total_quoted_price?: number;
+            /** Format: date-time */
+            required_date?: string;
+            customer_name?: string;
+            customer_email?: string;
+            customer_phone?: string;
+            notes?: string;
+            created_by_user_id?: number;
+            items: components["schemas"]["RfqItemResponseDto"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
     };
     responses: never;
@@ -4574,6 +4862,135 @@ export interface operations {
                 content?: never;
             };
             /** @description Weld type not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RfqController_createStraightPipeRfq: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStraightPipeRfqWithItemDto"];
+            };
+        };
+        responses: {
+            /** @description RFQ created successfully */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RfqResponseDto"];
+                };
+            };
+            /** @description Bad request - validation errors or missing required data */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RfqController_calculateStraightPipeRequirements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Calculations completed successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StraightPipeCalculationResultDto"];
+                };
+            };
+        };
+    };
+    RfqController_getAllRfqs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of all RFQs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RfqResponseDto"][];
+                };
+            };
+        };
+    };
+    RfqController_getRfqById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description RFQ details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RfqResponseDto"];
+                };
+            };
+            /** @description RFQ not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RfqController_recalculateStraightPipeRfq: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recalculation completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StraightPipeCalculationResultDto"];
+                };
+            };
+            /** @description Straight pipe RFQ not found */
             404: {
                 headers: {
                     [name: string]: unknown;

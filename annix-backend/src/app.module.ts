@@ -27,6 +27,7 @@ import { BendDimensionService } from './bend-dimension/bend-dimension.service';
 import { BendDimensionController } from './bend-dimension/bend-dimension.controller';
 import { BendDimensionModule } from './bend-dimension/bend-dimension.module';
 import { WeldTypeModule } from './weld-type/weld-type.module';
+import { RfqModule } from './rfq/rfq.module';
 import typeormConfig from './config/typeorm';
 
 @Module({
@@ -55,6 +56,7 @@ import typeormConfig from './config/typeorm';
     NbNpsLookupModule,
     BendDimensionModule,
     WeldTypeModule,
+    RfqModule,
   ],
   controllers: [AppController, BendDimensionController],
   providers: [AppService, BendDimensionService],

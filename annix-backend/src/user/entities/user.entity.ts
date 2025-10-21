@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, OneToMany, JoinTable } from 'typeorm';
 import { UserRole } from '../../user-roles/entities/user-role.entity'
+import { Rfq } from '../../rfq/entities/rfq.entity';
 import { ApiProperty } from '@nestjs/swagger';
 import { Exclude } from 'class-transformer';
 
@@ -34,4 +35,8 @@ export class User {
   @ManyToMany(() => UserRole, (role) => role.users, { eager: true })
   @JoinTable()
   roles: UserRole[];
+
+  @ApiProperty({ description: 'RFQs created by this user', type: () => [Rfq] })
+  @OneToMany(() => Rfq, (rfq) => rfq.createdBy, { lazy: true })
+  rfqs: Promise<Rfq[]>;
 }
