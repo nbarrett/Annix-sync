@@ -832,7 +832,7 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex justify-between items-center">
               <h1 className="text-2xl font-bold text-gray-900">
-                Create Straight Pipe RFQ
+                Create Straight Pipe RFQ - test
               </h1>
               <button
                 onClick={onCancel}
