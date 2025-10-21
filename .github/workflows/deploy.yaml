@@ -1,0 +1,40 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: arc-runner-set
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Log in to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.tytodev.online
+          username: tyto
+          password: 42CgoXSCmvgBUK5G
+      
+      - name: Build and push Backend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./annix-backend
+          push: true
+          tags: |
+            registry.tytodev.online/${{ github.repository }}-backend:latest
+            registry.tytodev.online/${{ github.repository }}-backend:${{ github.sha }}
+      
+      - name: Build and push Frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./annix-frontend
+          push: true
+          tags: |
+            registry.tytodev.online/${{ github.repository }}-frontend:latest
+            registry.tytodev.online/${{ github.repository }}-frontend:${{ github.sha }}
