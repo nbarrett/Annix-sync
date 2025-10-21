@@ -27,8 +27,7 @@ jobs:
           context: ./annix-backend
           push: true
           tags: |
-            registry.tytodev.online/${{ lower(github.repository) }}-backend:latest
-            registry.tytodev.online/${{ lower(github.repository) }}-backend:${{ github.sha }}
+            registry.tytodev.online/annix-backend:latest
       
       - name: Build and push Frontend Docker image
         uses: docker/build-push-action@v5
@@ -36,5 +35,4 @@ jobs:
           context: ./annix-frontend
           push: true
           tags: |
-            registry.tytodev.online/${{ lower(github.repository) }}-frontend:latest
-            registry.tytodev.online/${{ lower(github.repository) }}-frontend:${{ github.sha }}
+            registry.tytodev.online/annix-frontend:latest
