@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_BASE_URL = 'http://localhost:4001';
 
 // Types based on our backend DTOs
 export interface CreateRfqDto {
@@ -81,6 +81,30 @@ export interface FlangePressureClass {
   id: number;
   designation: string;
   standard?: FlangeStandard;
+}
+
+export interface NominalOutsideDiameter {
+  id: number;
+  nominal_diameter_mm: number;
+  outside_diameter_mm: number;
+}
+
+export interface PipeDimension {
+  id: number;
+  wallThicknessMm: number;
+  internalDiameterMm?: number;
+  massKgm: number;
+  scheduleDesignation?: string;
+  scheduleNumber?: number;
+  nominalOutsideDiameter: NominalOutsideDiameter;
+  steelSpecification: SteelSpecification;
+}
+
+export interface PipePressure {
+  id: number;
+  temperatureC?: number;
+  maxWorkingPressureMpa?: number;
+  allowableStressMpa: number;
 }
 
 class ApiClient {
@@ -192,6 +216,50 @@ class ApiClient {
   async getFlangePressureClasses(): Promise<FlangePressureClass[]> {
     return this.request<FlangePressureClass[]>('/flange-pressure-class');
   }
+
+  // Pipe data endpoints
+  async getPipeDimensions(
+    nominalBore?: number,
+    steelSpecId?: number,
+    minPressure?: number,
+    temperature?: number
+  ): Promise<PipeDimension[]> {
+    const params = new URLSearchParams();
+    if (nominalBore) params.append('nominalBore', nominalBore.toString());
+    if (steelSpecId) params.append('steelSpecId', steelSpecId.toString());
+    if (minPressure) params.append('minPressure', minPressure.toString());
+    if (temperature) params.append('temperature', temperature.toString());
+    
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request<PipeDimension[]>(`/pipe-dimensions${query}`);
+  }
+
+  async getNominalBores(steelSpecId?: number): Promise<NominalOutsideDiameter[]> {
+    const query = steelSpecId ? `?steelSpecId=${steelSpecId}` : '';
+    return this.request<NominalOutsideDiameter[]>(`/nominal-outside-diameter-mm${query}`);
+  }
+
+  async getRecommendedSpecs(
+    nominalBore: number,
+    workingPressure: number,
+    temperature?: number,
+    steelSpecId?: number
+  ): Promise<{
+    pipeDimension: PipeDimension;
+    schedule?: string;
+    wallThickness: number;
+    maxPressure: number;
+  }> {
+    return this.request('/pipe-dimensions/recommend', {
+      method: 'POST',
+      body: JSON.stringify({
+        nominalBore,
+        workingPressure,
+        temperature: temperature || 20,
+        steelSpecId
+      }),
+    });
+  }
 }
 
 // Create and export the API client instance
@@ -211,6 +279,11 @@ export const masterDataApi = {
   getSteelSpecifications: () => apiClient.getSteelSpecifications(),
   getFlangeStandards: () => apiClient.getFlangeStandards(),
   getFlangePressureClasses: () => apiClient.getFlangePressureClasses(),
+  getPipeDimensions: (nominalBore?: number, steelSpecId?: number, minPressure?: number, temperature?: number) => 
+    apiClient.getPipeDimensions(nominalBore, steelSpecId, minPressure, temperature),
+  getNominalBores: (steelSpecId?: number) => apiClient.getNominalBores(steelSpecId),
+  getRecommendedSpecs: (nominalBore: number, workingPressure: number, temperature?: number, steelSpecId?: number) =>
+    apiClient.getRecommendedSpecs(nominalBore, workingPressure, temperature, steelSpecId),
 };
 
 export const authApi = {

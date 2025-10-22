@@ -186,4 +186,64 @@ export class PipeDimensionService {
     const pipe = await this.findOne(id);
     await this.pipeRepo.remove(pipe);
   }
+
+  async getRecommendedSpecs(
+    nominalBore: number,
+    workingPressure: number,
+    temperature: number = 20,
+    steelSpecId?: number
+  ): Promise<{
+    pipeDimension: PipeDimension;
+    schedule?: string;
+    wallThickness: number;
+    maxPressure: number;
+  }> {
+    // Find nominal outside diameter that matches the bore
+    const nominal = await this.nominalRepo.findOne({ 
+      where: { nominal_diameter_mm: nominalBore } 
+    });
+    
+    if (!nominal) {
+      throw new NotFoundException(`No pipe dimensions found for ${nominalBore}mm nominal bore`);
+    }
+
+    // Build query to find pipe dimensions
+    let query = this.pipeRepo
+      .createQueryBuilder('pipe')
+      .leftJoinAndSelect('pipe.nominalOutsideDiameter', 'nominal')
+      .leftJoinAndSelect('pipe.steelSpecification', 'steel')
+      .leftJoinAndSelect('pipe.pressures', 'pressure')
+      .where('nominal.id = :nominalId', { nominalId: nominal.id });
+
+    // Filter by steel specification if provided
+    if (steelSpecId) {
+      query = query.andWhere('steel.id = :steelSpecId', { steelSpecId });
+    }
+
+    // Filter by pressure rating - find pipes with pressure >= working pressure
+    query = query
+      .andWhere('pressure.temperature_c IS NOT NULL AND pressure.temperature_c <= :temperature', { temperature })
+      .andWhere('pressure.max_working_pressure_mpa IS NOT NULL AND pressure.max_working_pressure_mpa >= :workingPressure', { workingPressure })
+      .orderBy('pipe.wall_thickness_mm', 'ASC'); // Start with thinnest wall
+
+    const suitablePipes = await query.getMany();
+    
+    if (suitablePipes.length === 0) {
+      throw new NotFoundException(`No suitable pipe dimensions found for the given conditions`);
+    }
+
+    // Return the first suitable pipe (thinnest wall thickness that meets requirements)
+    const recommendedPipe = suitablePipes[0];
+    const suitablePressure = recommendedPipe.pressures.find(p => 
+      (p.temperature_c !== null && p.temperature_c <= temperature) && 
+      (p.max_working_pressure_mpa !== null && p.max_working_pressure_mpa >= workingPressure)
+    );
+
+    return {
+      pipeDimension: recommendedPipe,
+      schedule: recommendedPipe.schedule_designation || `Sch${recommendedPipe.schedule_number || 'STD'}`,
+      wallThickness: recommendedPipe.wall_thickness_mm,
+      maxPressure: suitablePressure?.max_working_pressure_mpa || 0
+    };
+  }
 }

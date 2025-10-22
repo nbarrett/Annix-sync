@@ -44,6 +44,47 @@ export class PipeDimensionController {
     return this.pipeDimensionService.update(id, updatePipeDimensionDto);
   }
 
+  @Post('recommend')
+  @ApiOperation({ summary: 'Get recommended pipe specifications based on working conditions' })
+  @ApiBody({ 
+    schema: {
+      type: 'object',
+      properties: {
+        nominalBore: { type: 'number', description: 'Nominal bore in mm' },
+        workingPressure: { type: 'number', description: 'Working pressure in MPa' },
+        temperature: { type: 'number', description: 'Working temperature in Celsius', default: 20 },
+        steelSpecId: { type: 'number', description: 'Steel specification ID (optional)' }
+      },
+      required: ['nominalBore', 'workingPressure']
+    }
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Recommended pipe specifications',
+    schema: {
+      type: 'object',
+      properties: {
+        pipeDimension: { $ref: '#/components/schemas/PipeDimension' },
+        schedule: { type: 'string' },
+        wallThickness: { type: 'number' },
+        maxPressure: { type: 'number' }
+      }
+    }
+  })
+  async getRecommendations(@Body() body: {
+    nominalBore: number;
+    workingPressure: number;
+    temperature?: number;
+    steelSpecId?: number;
+  }) {
+    return this.pipeDimensionService.getRecommendedSpecs(
+      body.nominalBore,
+      body.workingPressure,
+      body.temperature || 20,
+      body.steelSpecId
+    );
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a pipe dimension' })
   @ApiResponse({ status: 200, description: 'Pipe dimension deleted successfully' })
