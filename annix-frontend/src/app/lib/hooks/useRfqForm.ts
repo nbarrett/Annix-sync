@@ -6,9 +6,19 @@ import { CreateStraightPipeRfqDto, StraightPipeCalculationResult } from '@/app/l
 export interface StraightPipeEntry {
   id: string;
   description: string;
+  clientItemNumber?: string;
   specs: CreateStraightPipeRfqDto;
   calculation?: StraightPipeCalculationResult;
+  calculatedPipes?: number;
   notes?: string;
+}
+
+export interface GlobalSpecs {
+  workingPressureBar?: number;
+  workingTemperatureC?: number;
+  steelSpecificationId?: number;
+  flangeStandardId?: number;
+  flangePressureClassId?: number;
 }
 
 export interface RfqFormData {
@@ -19,6 +29,7 @@ export interface RfqFormData {
   customerPhone: string;
   requiredDate: string;
   notes: string;
+  globalSpecs: GlobalSpecs;
   straightPipeEntries: StraightPipeEntry[];
 }
 
@@ -45,6 +56,7 @@ export const useRfqForm = () => {
     customerPhone: '+27 11 555 0123',
     requiredDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     notes: 'Urgent delivery required by month end',
+    globalSpecs: {},
     straightPipeEntries: [],
   });
 
@@ -114,6 +126,13 @@ export const useRfqForm = () => {
     setCurrentStep(prev => Math.max(prev - 1, 1));
   }, []);
 
+  const updateGlobalSpecs = useCallback((specs: GlobalSpecs) => {
+    setRfqData(prev => ({
+      ...prev,
+      globalSpecs: specs,
+    }));
+  }, []);
+
   const resetForm = useCallback(() => {
     setCurrentStep(1);
     setRfqData({
@@ -124,6 +143,7 @@ export const useRfqForm = () => {
       customerPhone: '',
       requiredDate: '',
       notes: '',
+      globalSpecs: {},
       straightPipeEntries: [],
     });
   }, []);
@@ -133,6 +153,7 @@ export const useRfqForm = () => {
     setCurrentStep,
     rfqData,
     updateRfqField,
+    updateGlobalSpecs,
     addStraightPipeEntry,
     updateStraightPipeEntry,
     removeStraightPipeEntry,

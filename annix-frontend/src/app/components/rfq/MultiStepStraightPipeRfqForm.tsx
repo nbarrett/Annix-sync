@@ -3,51 +3,95 @@
 import React, { useState, useEffect } from 'react';
 import { useRfqForm, StraightPipeEntry } from '@/app/lib/hooks/useRfqForm';
 import { rfqApi } from '@/app/lib/api/client';
+import { 
+  validatePage1RequiredFields, 
+  validatePage2Specifications, 
+  validatePage3Items,
+  canProceedToNextStep 
+} from '@/app/lib/utils/validation';
+import { 
+  generateSystemReferenceNumber,
+  generateItemNumber,
+  generatePipeDescription,
+  calculateScheduleFromPressureAndNB,
+  calculateWallThicknessFromPressureAndNB,
+  updateQuantityOrTotalLength,
+  getAvailableFlangeClasses
+} from '@/app/lib/utils/systemUtils';
 
 interface Props {
   onSuccess: (rfqId: string) => void;
   onCancel: () => void;
 }
 
-// Test data for development
-const TEST_MASTER_DATA = {
-  steelSpecs: [
-    { id: 1, steelSpecName: 'SABS 719 (Carbon Steel)' },
-    { id: 2, steelSpecName: 'ASTM A106 Grade B' },
-    { id: 3, steelSpecName: 'SABS 62 (Stainless Steel)' },
-  ],
-  flangeStandards: [
-    { id: 1, code: 'SABS 1123' },
-    { id: 2, code: 'ANSI B16.5' },
-    { id: 3, code: 'DIN EN 1092' }
-  ],
-  pressureClasses: [
-    { id: 1, designation: 'Class 150' },
-    { id: 2, designation: 'Class 300' },
-    { id: 3, designation: 'Class 600' },
-    { id: 4, designation: 'PN 10' },
-    { id: 5, designation: 'PN 16' },
-    { id: 6, designation: 'PN 25' }
-  ]
-};
+// Master data structure for API integration
+interface MasterData {
+  steelSpecs: Array<{ id: number; steelSpecName: string }>;
+  flangeStandards: Array<{ id: number; code: string }>;
+  pressureClasses: Array<{ id: number; designation: string }>;
+  nominalBores?: Array<{ id: number; nominal_diameter_mm: number; outside_diameter_mm: number }>;
+}
 
 function ProjectDetailsStep({ rfqData, onUpdate, errors }: any) {
+  const [additionalNotes, setAdditionalNotes] = useState<string[]>([]);
+  
+  const commonNotes = [
+    "All pipes to be hydrostatically tested before delivery",
+    "Material certificates required (EN 10204 3.1)",
+    "Pipes to be supplied with protective end caps",
+    "Delivery required to site in South Africa",
+    "All flanges to be raised face (RF) unless specified",
+    "Pipes to comply with SABS/SANS standards",
+    "Mill test certificates required for all items",
+    "Surface preparation: Shot blast to SA2.5 standard",
+    "Urgent delivery required - please expedite",
+    "Client inspection required before dispatch"
+  ];
+
+  // Auto-generate RFQ number if field is empty
+  useEffect(() => {
+    if (!rfqData.projectName || rfqData.projectName.trim() === '') {
+      const autoGenNumber = generateSystemReferenceNumber();
+      onUpdate('projectName', autoGenNumber);
+    }
+  }, []);
+
+  const addNote = (note: string) => {
+    if (note && !additionalNotes.includes(note)) {
+      const newNotes = [...additionalNotes, note];
+      setAdditionalNotes(newNotes);
+      const currentNotes = rfqData.notes || '';
+      const updatedNotes = currentNotes ? `${currentNotes}\n• ${note}` : `• ${note}`;
+      onUpdate('notes', updatedNotes);
+    }
+  };
+
+  const removeNote = (noteToRemove: string) => {
+    const newNotes = additionalNotes.filter(note => note !== noteToRemove);
+    setAdditionalNotes(newNotes);
+    const updatedNotes = newNotes.length > 0 ? newNotes.map(note => `• ${note}`).join('\n') : '';
+    onUpdate('notes', updatedNotes);
+  };
+
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Project Details</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">Project/RFQ Details</h2>
       
       <div className="space-y-6">
         <div>
           <label className="block text-sm font-semibold text-gray-900 mb-2">
-            Project Name *
+            Project/RFQ Name
           </label>
           <input
             type="text"
             value={rfqData.projectName}
             onChange={(e) => onUpdate('projectName', e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-            placeholder="Enter project name"
+            placeholder="Enter project/RFQ name (auto-generated if left empty)"
           />
+          <p className="mt-1 text-xs text-gray-500">
+            Leave empty for system-generated RFQ number (e.g., RFQ-2025-001)
+          </p>
           {errors.projectName && (
             <p className="mt-2 text-sm text-red-600">{errors.projectName}</p>
           )}
@@ -55,14 +99,14 @@ function ProjectDetailsStep({ rfqData, onUpdate, errors }: any) {
 
         <div>
           <label className="block text-sm font-semibold text-gray-900 mb-2">
-            Project Description
+            RFQ Description
           </label>
           <textarea
             value={rfqData.description}
             onChange={(e) => onUpdate('description', e.target.value)}
             rows={3}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-            placeholder="Brief description of the project requirements"
+            placeholder="Brief description of the RFQ requirements"
           />
         </div>
 
@@ -85,7 +129,7 @@ function ProjectDetailsStep({ rfqData, onUpdate, errors }: any) {
 
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Customer Email
+              Customer Email *
             </label>
             <input
               type="email"
@@ -93,14 +137,18 @@ function ProjectDetailsStep({ rfqData, onUpdate, errors }: any) {
               onChange={(e) => onUpdate('customerEmail', e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               placeholder="customer@company.com"
+              required
             />
+            {errors.customerEmail && (
+              <p className="mt-2 text-sm text-red-600">{errors.customerEmail}</p>
+            )}
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Customer Phone
+              Customer Phone *
             </label>
             <input
               type="tel"
@@ -108,291 +156,251 @@ function ProjectDetailsStep({ rfqData, onUpdate, errors }: any) {
               onChange={(e) => onUpdate('customerPhone', e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               placeholder="+27 11 555 0123"
+              required
             />
+            {errors.customerPhone && (
+              <p className="mt-2 text-sm text-red-600">{errors.customerPhone}</p>
+            )}
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Required Date
+              Required Date *
             </label>
             <input
               type="date"
               value={rfqData.requiredDate}
               onChange={(e) => onUpdate('requiredDate', e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              required
             />
+            {errors.requiredDate && (
+              <p className="mt-2 text-sm text-red-600">{errors.requiredDate}</p>
+            )}
           </div>
         </div>
 
         <div>
           <label className="block text-sm font-semibold text-gray-900 mb-2">
             Additional Notes
+            <button
+              type="button"
+              className="ml-2 text-blue-600 hover:text-blue-800 text-sm"
+              title="Common notes available"
+            >
+              ⓘ
+            </button>
           </label>
+          
+          {/* Common Notes Dropdown */}
+          <div className="mb-3">
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  addNote(e.target.value);
+                  e.target.value = '';
+                }
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 text-sm"
+            >
+              <option value="">Select common note to add...</option>
+              {commonNotes.map((note, index) => (
+                <option key={index} value={note} disabled={additionalNotes.includes(note)}>
+                  {note}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Selected Notes Display */}
+          {additionalNotes.length > 0 && (
+            <div className="mb-3 space-y-2">
+              <p className="text-sm font-medium text-gray-700">Selected Notes:</p>
+              {additionalNotes.map((note, index) => (
+                <div key={index} className="flex items-center justify-between bg-blue-50 px-3 py-2 rounded-lg">
+                  <span className="text-sm text-blue-800">• {note}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeNote(note)}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Custom Notes Textarea */}
           <textarea
             value={rfqData.notes}
             onChange={(e) => onUpdate('notes', e.target.value)}
-            rows={3}
+            rows={4}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-            placeholder="Any special requirements, delivery instructions, or other important information"
+            placeholder="Enter any additional custom requirements, delivery instructions, or other important information..."
           />
+          
+          <p className="mt-1 text-xs text-gray-500">
+            Use the dropdown above to quickly add common notes, or type custom notes here.
+          </p>
         </div>
       </div>
     </div>
   );
 }
 
-function PipeSpecificationsStep({ entries, masterData, onAddEntry, onUpdateEntry, onRemoveEntry, errors }: any) {
+function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, errors }: any) {
+  const workingPressures = [6, 10, 16, 25, 40, 63, 100, 160, 250, 320, 400, 630]; // Bar values
+  const workingTemperatures = [-29, -20, 0, 20, 50, 80, 120, 150, 200, 250, 300, 350, 400, 450, 500]; // Celsius values
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Straight Pipe Specifications</h2>
-        <button
-          onClick={() => onAddEntry()}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
-        >
-          + Add Another Pipe
-        </button>
-      </div>
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">Specifications</h2>
+      <p className="text-gray-600 mb-8">
+        Define the working conditions and material specifications for your RFQ. These will be applied to all items unless overridden.
+      </p>
 
-      <div className="space-y-6">
-        {entries.map((entry: StraightPipeEntry, index: number) => (
-          <div key={entry.id} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Pipe #{index + 1}</h3>
-              {entries.length > 1 && (
-                <button
-                  onClick={() => onRemoveEntry(entry.id)}
-                  className="text-red-600 hover:text-red-800 font-medium"
-                >
-                  Remove
-                </button>
+      <div className="space-y-8">
+        {/* Working Conditions */}
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Working Conditions</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Working Pressure */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
+                Working Pressure (bar) *
+              </label>
+              <select
+                value={globalSpecs?.workingPressureBar || ''}
+                onChange={(e) => onUpdateGlobalSpecs({
+                  ...globalSpecs,
+                  workingPressureBar: e.target.value ? Number(e.target.value) : undefined
+                })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                required
+              >
+                <option value="">Select pressure...</option>
+                {workingPressures.map((pressure) => (
+                  <option key={pressure} value={pressure}>
+                    {pressure} bar
+                  </option>
+                ))}
+              </select>
+              {errors.workingPressure && (
+                <p className="mt-2 text-sm text-red-600">{errors.workingPressure}</p>
               )}
             </div>
 
-            <div className="space-y-4">
-              {/* Pipe Description */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Pipe Description *
-                </label>
-                <input
-                  type="text"
-                  value={entry.description}
-                  onChange={(e) => onUpdateEntry(entry.id, { description: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  placeholder="e.g., 500NB Sch20 Straight Pipe for 10 Bar Pipeline"
-                />
-                {errors[`pipe_${index}_description`] && (
-                  <p className="mt-2 text-sm text-red-600">{errors[`pipe_${index}_description`]}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Nominal Bore */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Nominal Bore (mm) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    value={entry.specs.nominalBoreMm}
-                    onChange={(e) => onUpdateEntry(entry.id, { 
-                      specs: { ...entry.specs, nominalBoreMm: Number(e.target.value) }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                    placeholder="500"
-                  />
-                  {errors[`pipe_${index}_nb`] && (
-                    <p className="mt-2 text-sm text-red-600">{errors[`pipe_${index}_nb`]}</p>
-                  )}
-                </div>
-
-                {/* Working Pressure */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Working Pressure (bar) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={entry.specs.workingPressureBar}
-                    onChange={(e) => onUpdateEntry(entry.id, { 
-                      specs: { ...entry.specs, workingPressureBar: Number(e.target.value) }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                    placeholder="10"
-                  />
-                  {errors[`pipe_${index}_pressure`] && (
-                    <p className="mt-2 text-sm text-red-600">{errors[`pipe_${index}_pressure`]}</p>
-                  )}
-                </div>
-
-                {/* Working Temperature */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Working Temperature (°C)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={entry.specs.workingTemperatureC || ''}
-                    onChange={(e) => onUpdateEntry(entry.id, { 
-                      specs: { ...entry.specs, workingTemperatureC: e.target.value ? Number(e.target.value) : undefined }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                    placeholder="120"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Schedule Type */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Schedule Type *
-                  </label>
-                  <select
-                    value={entry.specs.scheduleType}
-                    onChange={(e) => onUpdateEntry(entry.id, { 
-                      specs: { ...entry.specs, scheduleType: e.target.value as 'schedule' | 'wall_thickness' }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  >
-                    <option value="schedule">Schedule Number</option>
-                    <option value="wall_thickness">Wall Thickness</option>
-                  </select>
-                </div>
-
-                {/* Schedule Number or Wall Thickness */}
-                {entry.specs.scheduleType === 'schedule' ? (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Schedule Number *
-                    </label>
-                    <select
-                      value={entry.specs.scheduleNumber || ''}
-                      onChange={(e) => onUpdateEntry(entry.id, { 
-                        specs: { ...entry.specs, scheduleNumber: e.target.value }
-                      })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                    >
-                      <option value="">Select Schedule</option>
-                      <option value="Sch10">Sch10</option>
-                      <option value="Sch20">Sch20</option>
-                      <option value="Sch40">Sch40</option>
-                      <option value="Sch80">Sch80</option>
-                      <option value="Sch120">Sch120</option>
-                      <option value="Sch160">Sch160</option>
-                    </select>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Wall Thickness (mm) *
-                    </label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={entry.specs.wallThicknessMm || ''}
-                      onChange={(e) => onUpdateEntry(entry.id, { 
-                        specs: { ...entry.specs, wallThicknessMm: e.target.value ? Number(e.target.value) : undefined }
-                      })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                      placeholder="15.09"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Steel Specification */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Steel Specification
-                  </label>
-                  <select
-                    value={entry.specs.steelSpecificationId || ''}
-                    onChange={(e) => onUpdateEntry(entry.id, { 
-                      specs: { ...entry.specs, steelSpecificationId: e.target.value ? Number(e.target.value) : undefined }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  >
-                    <option value="">Select steel spec...</option>
-                    {masterData.steelSpecs.map((spec: any) => (
-                      <option key={spec.id} value={spec.id}>
-                        {spec.steelSpecName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Flange Standard */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Flange Standard
-                  </label>
-                  <select
-                    value={entry.specs.flangeStandardId || ''}
-                    onChange={(e) => onUpdateEntry(entry.id, { 
-                      specs: { ...entry.specs, flangeStandardId: e.target.value ? Number(e.target.value) : undefined }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  >
-                    <option value="">Select flange standard...</option>
-                    {masterData.flangeStandards.map((standard: any) => (
-                      <option key={standard.id} value={standard.id}>
-                        {standard.code}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Flange Pressure Class */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Pressure Class
-                  </label>
-                  <select
-                    value={entry.specs.flangePressureClassId || ''}
-                    onChange={(e) => onUpdateEntry(entry.id, { 
-                      specs: { ...entry.specs, flangePressureClassId: e.target.value ? Number(e.target.value) : undefined }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  >
-                    <option value="">Select pressure class...</option>
-                    {masterData.pressureClasses.map((pc: any) => (
-                      <option key={pc.id} value={pc.id}>
-                        {pc.designation}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Additional Notes */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Additional Notes
-                </label>
-                <textarea
-                  value={entry.notes || ''}
-                  onChange={(e) => onUpdateEntry(entry.id, { notes: e.target.value })}
-                  rows={2}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  placeholder="Special requirements, testing notes, etc."
-                />
-              </div>
+            {/* Working Temperature */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
+                Working Temperature (°C) *
+              </label>
+              <select
+                value={globalSpecs?.workingTemperatureC || ''}
+                onChange={(e) => onUpdateGlobalSpecs({
+                  ...globalSpecs,
+                  workingTemperatureC: e.target.value ? Number(e.target.value) : undefined
+                })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                required
+              >
+                <option value="">Select temperature...</option>
+                {workingTemperatures.map((temp) => (
+                  <option key={temp} value={temp}>
+                    {temp}°C
+                  </option>
+                ))}
+              </select>
+              {errors.workingTemperature && (
+                <p className="mt-2 text-sm text-red-600">{errors.workingTemperature}</p>
+              )}
             </div>
           </div>
-        ))}
+        </div>
+
+        {/* Material Specifications */}
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Material Specifications</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Steel Specification */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
+                Steel Specification
+              </label>
+              <select
+                value={globalSpecs?.steelSpecificationId || ''}
+                onChange={(e) => onUpdateGlobalSpecs({
+                  ...globalSpecs,
+                  steelSpecificationId: e.target.value ? Number(e.target.value) : undefined
+                })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              >
+                <option value="">Select steel specification...</option>
+                {masterData.steelSpecs.map((spec: any) => (
+                  <option key={spec.id} value={spec.id}>
+                    {spec.steelSpecName}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Leave empty to specify per item on the next page
+              </p>
+            </div>
+
+            {/* Flange Standard */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
+                Flange Standard
+              </label>
+              <select
+                value={globalSpecs?.flangeStandardId || ''}
+                onChange={(e) => onUpdateGlobalSpecs({
+                  ...globalSpecs,
+                  flangeStandardId: e.target.value ? Number(e.target.value) : undefined
+                })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              >
+                <option value="">Select flange standard...</option>
+                {masterData.flangeStandards.map((standard: any) => (
+                  <option key={standard.id} value={standard.id}>
+                    {standard.code}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Leave empty to specify per item on the next page
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Future Additions Notice */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-blue-800 mb-2">Coming Soon</h3>
+          <p className="text-blue-700 text-sm">
+            Additional specifications will be added here in future updates:
+          </p>
+          <ul className="text-blue-600 text-sm mt-2 space-y-1">
+            <li>• Surface Protection requirements</li>
+            <li>• Design Factors</li>
+            <li>• Additional material specifications</li>
+          </ul>
+        </div>
       </div>
     </div>
   );
 }
 
-function QuantitiesCalculationsStep({ entries, onUpdateEntry, onCalculate, errors, loading }: any) {
+function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdateEntry, onRemoveEntry, onCalculate, errors, loading }: any) {
   const [isCalculating, setIsCalculating] = useState(false);
+
+  // Use nominal bores from master data, fallback to hardcoded values
+  const nominalBores = masterData.nominalBores?.length > 0 
+    ? masterData.nominalBores.map((nb: any) => nb.nominal_diameter_mm).sort((a: number, b: number) => a - b)
+    : [15, 20, 25, 32, 40, 50, 65, 80, 100, 125, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000]; // fallback values
 
   const handleCalculateAll = async () => {
     setIsCalculating(true);
@@ -417,155 +425,384 @@ function QuantitiesCalculationsStep({ entries, onUpdateEntry, onCalculate, error
     }, 0);
   };
 
+  const generateItemDescription = (entry: any) => {
+    return generatePipeDescription(
+      entry.specs.nominalBoreMm,
+      entry.specs.scheduleNumber,
+      entry.specs.wallThicknessMm,
+      undefined, // Steel spec name - would need to lookup from masterData
+      globalSpecs?.workingPressureBar || entry.specs.workingPressureBar
+    );
+  };
+
+  // Auto-calculate schedule and wall thickness when pressure and NB are available
+  const autoCalculateSpecs = async (entry: any) => {
+    const pressure = globalSpecs?.workingPressureBar;
+    const nominalBore = entry.specs.nominalBoreMm;
+    const steelSpecId = globalSpecs?.steelSpecificationId;
+    
+    if (pressure && nominalBore) {
+      try {
+        const [autoSchedule, autoWT] = await Promise.all([
+          calculateScheduleFromPressureAndNB(pressure, nominalBore, steelSpecId),
+          calculateWallThicknessFromPressureAndNB(pressure, nominalBore, steelSpecId)
+        ]);
+        
+        return {
+          scheduleNumber: autoSchedule,
+          wallThicknessMm: autoWT,
+          workingPressureBar: pressure
+        };
+      } catch (error) {
+        console.error('Error auto-calculating specs:', error);
+        return {};
+      }
+    }
+    return {};
+  };
+
+  const calculateQuantities = (entry: any, field: string, value: number) => {
+    const pipeLengthMm = (entry.specs.individualPipeLength || 12.192) * 1000; // Convert to mm
+    const result = updateQuantityOrTotalLength(
+      field as 'quantity' | 'totalLength',
+      value,
+      pipeLengthMm
+    );
+    
+    if (field === 'totalLength') {
+      return {
+        ...entry,
+        specs: {
+          ...entry.specs,
+          quantityValue: value,
+          quantityType: 'total_length'
+        },
+        calculatedPipes: result.quantity
+      };
+    } else if (field === 'numberOfPipes') {
+      return {
+        ...entry,
+        specs: {
+          ...entry.specs,
+          quantityValue: result.totalLength,
+          quantityType: 'total_length'
+        },
+        calculatedPipes: value
+      };
+    }
+    return entry;
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Quantities & Calculations</h2>
-        <button
-          onClick={handleCalculateAll}
-          disabled={isCalculating || loading}
-          className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isCalculating || loading ? 'Calculating...' : '🔄 Calculate All'}
-        </button>
+        <h2 className="text-2xl font-bold text-gray-900">Item Upload</h2>
+        <div className="flex gap-3">
+          <button
+            onClick={() => onAddEntry()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+          >
+            + Add Another Item
+          </button>
+          <button
+            onClick={handleCalculateAll}
+            disabled={isCalculating || loading}
+            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isCalculating || loading ? 'Calculating...' : '🔄 Calculate All'}
+          </button>
+        </div>
       </div>
 
       <div className="space-y-6">
         {entries.map((entry: StraightPipeEntry, index: number) => (
           <div key={entry.id} className="border border-gray-200 rounded-lg p-6 bg-white">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">
-                Pipe #{index + 1}: {entry.description}
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                {entry.specs.nominalBoreMm}mm NB • {entry.specs.workingPressureBar} bar • {entry.specs.scheduleNumber || `${entry.specs.wallThicknessMm}mm WT`}
-              </p>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Item #{index + 1}</h3>
+              {entries.length > 1 && (
+                <button
+                  onClick={() => onRemoveEntry(entry.id)}
+                  className="text-red-600 hover:text-red-800 font-medium"
+                >
+                  Remove Item
+                </button>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Quantities Input */}
-              <div className="space-y-4">
-                <h4 className="text-md font-semibold text-gray-800 border-b border-gray-200 pb-2">
-                  Quantities
-                </h4>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Total Length (m) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    value={entry.specs.quantityValue}
-                    onChange={(e) => onUpdateEntry(entry.id, { 
-                      specs: { ...entry.specs, quantityValue: Number(e.target.value) }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                    placeholder="8000"
-                  />
-                  {errors[`pipe_${index}_length`] && (
-                    <p className="mt-2 text-sm text-red-600">{errors[`pipe_${index}_length`]}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Individual Pipe Length (m) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    value={entry.specs.individualPipeLength}
-                    onChange={(e) => onUpdateEntry(entry.id, { 
-                      specs: { ...entry.specs, individualPipeLength: Number(e.target.value) }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                    placeholder="12.192"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Standard pipe length per joint
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Quantity Type
-                  </label>
-                  <select
-                    value={entry.specs.quantityType}
-                    onChange={(e) => onUpdateEntry(entry.id, { 
-                      specs: { ...entry.specs, quantityType: e.target.value as 'total_length' | 'number_of_pipes' }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  >
-                    <option value="total_length">Total Length Required</option>
-                    <option value="number_of_pipes">Number of Pipes</option>
-                  </select>
-                </div>
+            <div className="space-y-6">
+              {/* Auto-generated Description */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <label className="block text-sm font-semibold text-blue-800 mb-2">
+                  Auto-Generated Description
+                </label>
+                <p className="text-blue-900 font-medium">
+                  {generateItemDescription(entry)}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  This description is automatically generated based on the specifications below
+                </p>
               </div>
 
-              {/* Calculations Display */}
-              <div className="space-y-4">
-                <h4 className="text-md font-semibold text-gray-800 border-b border-gray-200 pb-2">
-                  Calculated Results
-                </h4>
+              {/* Client Item Number */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Client Item Number
+                </label>
+                <input
+                  type="text"
+                  value={entry.clientItemNumber || ''}
+                  onChange={(e) => onUpdateEntry(entry.id, { clientItemNumber: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                  placeholder="Leave empty for auto-generated number (e.g., ITM-001)"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Your reference number for this item (auto-generated if left empty)
+                </p>
+              </div>
 
-                {entry.calculation ? (
-                  <div className="space-y-3">
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-blue-900">Outside Diameter:</span>
-                        <span className="text-sm font-bold text-blue-900">
-                          {entry.calculation.outsideDiameterMm?.toFixed(2) || 'N/A'} mm
-                        </span>
-                      </div>
-                    </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left Column - Item Specifications */}
+                <div className="space-y-4">
+                  <h4 className="text-md font-semibold text-gray-800 border-b border-gray-200 pb-2">
+                    Item Specifications
+                  </h4>
 
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-green-900">Wall Thickness:</span>
-                        <span className="text-sm font-bold text-green-900">
-                          {entry.calculation.wallThicknessMm?.toFixed(3) || 'N/A'} mm
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="bg-purple-50 p-4 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-purple-900">Weight per Meter:</span>
-                        <span className="text-sm font-bold text-purple-900">
-                          {entry.calculation.pipeWeightPerMeter?.toFixed(3) || 'N/A'} kg/m
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="bg-orange-50 p-4 rounded-lg border-2 border-orange-200">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-orange-900">Total Weight:</span>
-                        <span className="text-lg font-bold text-orange-900">
-                          {formatWeight(entry.calculation.totalPipeWeight)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-medium text-gray-700">Number of Pipes:</span>
-                        <span className="text-xs text-gray-700">
-                          {entry.calculation.calculatedPipeCount || 'N/A'}
-                        </span>
-                      </div>
-                    </div>
+                  {/* Nominal Bore */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Nominal Bore (mm) *
+                    </label>
+                    <select
+                      value={entry.specs.nominalBoreMm}
+                      onChange={async (e) => {
+                        const nominalBore = Number(e.target.value);
+                        
+                        // First update with the nominal bore
+                        onUpdateEntry(entry.id, {
+                          specs: { 
+                            ...entry.specs, 
+                            nominalBoreMm: nominalBore
+                          }
+                        });
+                        
+                        // Then calculate auto specs asynchronously
+                        try {
+                          const autoSpecs = await autoCalculateSpecs({ 
+                            specs: { ...entry.specs, nominalBoreMm: nominalBore } 
+                          });
+                          
+                          const updatedEntry = {
+                            ...entry,
+                            specs: { 
+                              ...entry.specs, 
+                              nominalBoreMm: nominalBore,
+                              ...autoSpecs
+                            }
+                          };
+                          
+                          updatedEntry.description = generateItemDescription(updatedEntry);
+                          onUpdateEntry(entry.id, updatedEntry);
+                        } catch (error) {
+                          console.error('Error auto-calculating specs:', error);
+                        }
+                      }}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                      required
+                    >
+                      <option value="">Select nominal bore...</option>
+                      {nominalBores.map((nb: number) => (
+                        <option key={nb} value={nb}>
+                          {nb}mm NB
+                        </option>
+                      ))}
+                    </select>
+                    {errors[`pipe_${index}_nb`] && (
+                      <p className="mt-2 text-sm text-red-600">{errors[`pipe_${index}_nb`]}</p>
+                    )}
                   </div>
-                ) : (
-                  <div className="bg-gray-50 p-6 rounded-lg text-center">
-                    <p className="text-gray-500 text-sm">
-                      No calculations available yet.
-                      <br />
-                      Click "Calculate All" to generate weight calculations.
+
+                  {/* Schedule/Wall Thickness - Auto/Manual */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Schedule/Wall Thickness
+                      {globalSpecs?.workingPressureBar ? (
+                        <span className="text-green-600 text-xs ml-2">(Automated)</span>
+                      ) : (
+                        <span className="text-orange-600 text-xs ml-2">(Manual Selection Required)</span>
+                      )}
+                    </label>
+                    
+                    {globalSpecs?.workingPressureBar && entry.specs.nominalBoreMm ? (
+                      <div className="bg-green-50 p-3 rounded-lg">
+                        <p className="text-green-800 font-medium">
+                          Auto-calculated based on {globalSpecs.workingPressureBar} bar and {entry.specs.nominalBoreMm}mm NB
+                        </p>
+                        <div className="text-green-600 text-sm mt-1 space-y-1">
+                          <p>Schedule: {entry.specs.scheduleNumber || 'Calculating...'}</p>
+                          <p>Wall Thickness: {entry.specs.wallThicknessMm || 'Calculating...'}mm</p>
+                        </div>
+                        <p className="text-xs text-green-500 mt-2">
+                          Values automatically determined from pressure and NB combination
+                        </p>
+                      </div>
+                    ) : (
+                      <select
+                        value={entry.specs.scheduleNumber || ''}
+                        onChange={(e) => onUpdateEntry(entry.id, { 
+                          specs: { ...entry.specs, scheduleNumber: e.target.value }
+                        })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                      >
+                        <option value="">Select schedule...</option>
+                        <option value="Sch10">Sch10</option>
+                        <option value="Sch20">Sch20</option>
+                        <option value="Sch40">Sch40</option>
+                        <option value="Sch80">Sch80</option>
+                        <option value="Sch120">Sch120</option>
+                        <option value="Sch160">Sch160</option>
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Pipe Lengths */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Length of Each Pipe (m) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={entry.specs.individualPipeLength}
+                      onChange={(e) => onUpdateEntry(entry.id, { 
+                        specs: { ...entry.specs, individualPipeLength: Number(e.target.value) }
+                      })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                      placeholder="12.192"
+                      required
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Standard length per individual pipe
                     </p>
                   </div>
-                )}
+                </div>
+
+                {/* Right Column - Quantities */}
+                <div className="space-y-4">
+                  <h4 className="text-md font-semibold text-gray-800 border-b border-gray-200 pb-2">
+                    Quantities & Calculations
+                  </h4>
+
+                  {/* Quantity of Items */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Quantity of Items (Each) *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={entry.calculatedPipes || Math.ceil((entry.specs.quantityValue || 0) / (entry.specs.individualPipeLength || 12.192))}
+                      onChange={(e) => {
+                        const numberOfPipes = Number(e.target.value);
+                        const updatedEntry = calculateQuantities(entry, 'numberOfPipes', numberOfPipes);
+                        onUpdateEntry(entry.id, updatedEntry);
+                      }}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                      placeholder="1000"
+                      required
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Number of individual pipes required
+                    </p>
+                  </div>
+
+                  {/* Total Length */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Total Length of Line (m) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={entry.specs.quantityValue || 0}
+                      onChange={(e) => {
+                        const totalLength = Number(e.target.value);
+                        const updatedEntry = calculateQuantities(entry, 'totalLength', totalLength);
+                        onUpdateEntry(entry.id, updatedEntry);
+                      }}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                      placeholder="8000"
+                      required
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Total pipeline length required
+                    </p>
+                  </div>
+
+                  {/* Flange Information */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Flanges
+                      {globalSpecs?.flangeStandardId ? (
+                        <span className="text-green-600 text-xs ml-2">(From Global Specs)</span>
+                      ) : (
+                        <span className="text-orange-600 text-xs ml-2">(Item Specific)</span>
+                      )}
+                    </label>
+                    
+                    {globalSpecs?.flangeStandardId ? (
+                      <div className="bg-green-50 p-3 rounded-lg">
+                        <p className="text-green-800 text-sm">
+                          Using global flange standard from specifications page
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <select
+                          value={entry.specs.flangeStandardId || ''}
+                          onChange={(e) => onUpdateEntry(entry.id, { 
+                            specs: { ...entry.specs, flangeStandardId: e.target.value ? Number(e.target.value) : undefined }
+                          })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                        >
+                          <option value="">Select flange standard...</option>
+                          {masterData.flangeStandards.map((standard: any) => (
+                            <option key={standard.id} value={standard.id}>
+                              {standard.code}
+                            </option>
+                          ))}
+                        </select>
+                        
+                        <select
+                          value={entry.specs.flangePressureClassId || ''}
+                          onChange={(e) => onUpdateEntry(entry.id, { 
+                            specs: { ...entry.specs, flangePressureClassId: e.target.value ? Number(e.target.value) : undefined }
+                          })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                        >
+                          <option value="">Select pressure class...</option>
+                          {masterData.pressureClasses.map((pc: any) => (
+                            <option key={pc.id} value={pc.id}>
+                              {pc.designation}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Calculation Results */}
+                  {entry.calculation && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h5 className="text-sm font-semibold text-gray-800 mb-2">Calculated Weight</h5>
+                      <div className="text-lg font-bold text-gray-900">
+                        {formatWeight(entry.calculation.totalPipeWeight)}
+                      </div>
+                      <div className="text-sm text-gray-600 mt-1">
+                        {entry.calculation.pipeWeightPerMeter?.toFixed(3)} kg/m
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -726,19 +963,92 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
     currentStep,
     rfqData,
     updateRfqField,
+    updateGlobalSpecs,
     addStraightPipeEntry,
     updateStraightPipeEntry,
     removeStraightPipeEntry,
     updateEntryCalculation,
     getTotalWeight,
     getTotalValue,
-    nextStep,
+    nextStep: originalNextStep,
     prevStep,
   } = useRfqForm();
 
-  const [masterData, setMasterData] = useState(TEST_MASTER_DATA);
+  const [masterData, setMasterData] = useState<MasterData>({
+    steelSpecs: [],
+    flangeStandards: [],
+    pressureClasses: [],
+    nominalBores: []
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [isLoadingMasterData, setIsLoadingMasterData] = useState(true);
+
+  // Load master data from API
+  useEffect(() => {
+    const loadMasterData = async () => {
+      try {
+        setIsLoadingMasterData(true);
+        const { masterDataApi } = await import('@/app/lib/api/client');
+        
+        const [steelSpecs, flangeStandards, pressureClasses, nominalBores] = await Promise.all([
+          masterDataApi.getSteelSpecifications(),
+          masterDataApi.getFlangeStandards(),
+          masterDataApi.getFlangePressureClasses(),
+          masterDataApi.getNominalBores()
+        ]);
+
+        setMasterData({
+          steelSpecs,
+          flangeStandards,
+          pressureClasses,
+          nominalBores
+        });
+      } catch (error) {
+        console.error('Error loading master data:', error);
+        // Fallback to empty arrays
+        setMasterData({
+          steelSpecs: [],
+          flangeStandards: [],
+          pressureClasses: [],
+          nominalBores: []
+        });
+      } finally {
+        setIsLoadingMasterData(false);
+      }
+    };
+
+    loadMasterData();
+  }, []);
+
+  // Enhanced next step function with validation
+  const nextStep = () => {
+    // Validate current step before proceeding
+    let errors: Record<string, string> = {};
+    
+    switch (currentStep) {
+      case 1:
+        errors = validatePage1RequiredFields(
+          rfqData.customerEmail,
+          rfqData.customerPhone,
+          rfqData.requiredDate
+        );
+        break;
+      case 2:
+        errors = validatePage2Specifications(rfqData.globalSpecs);
+        break;
+      case 3:
+        errors = validatePage3Items(rfqData.straightPipeEntries);
+        break;
+    }
+
+    setValidationErrors(errors);
+
+    // Only proceed if no validation errors
+    if (Object.keys(errors).length === 0) {
+      originalNextStep();
+    }
+  };
 
   // Add initial entry if none exist
   useEffect(() => {
@@ -746,6 +1056,16 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
       addStraightPipeEntry();
     }
   }, [rfqData.straightPipeEntries.length, addStraightPipeEntry]);
+
+  // Auto-generate item numbers for entries without client item numbers
+  useEffect(() => {
+    rfqData.straightPipeEntries.forEach((entry) => {
+      if (!entry.clientItemNumber || entry.clientItemNumber.trim() === '') {
+        const autoGenNumber = generateItemNumber();
+        updateStraightPipeEntry(entry.id, { clientItemNumber: autoGenNumber });
+      }
+    });
+  }, [rfqData.straightPipeEntries, updateStraightPipeEntry]);
 
   const handleCalculateAll = async () => {
     try {
@@ -772,9 +1092,9 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
   };
 
   const steps = [
-    { number: 1, title: 'Project Details', description: 'Basic project information' },
-    { number: 2, title: 'Pipe Specifications', description: 'Technical requirements' },
-    { number: 3, title: 'Quantities & Calculations', description: 'Measurements and weights' },
+    { number: 1, title: 'Project/RFQ Details', description: 'Basic project and customer information' },
+    { number: 2, title: 'Specifications', description: 'Working conditions and material specs' },
+    { number: 3, title: 'Item Upload', description: 'Pipe details and quantities' },
     { number: 4, title: 'Review & Submit', description: 'Final review and submission' }
   ];
 
@@ -790,20 +1110,22 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
         );
       case 2:
         return (
-          <PipeSpecificationsStep
-            entries={rfqData.straightPipeEntries}
+          <SpecificationsStep
+            globalSpecs={rfqData.globalSpecs}
+            onUpdateGlobalSpecs={updateGlobalSpecs}
             masterData={masterData}
-            onAddEntry={addStraightPipeEntry}
-            onUpdateEntry={updateStraightPipeEntry}
-            onRemoveEntry={removeStraightPipeEntry}
             errors={validationErrors}
           />
         );
       case 3:
         return (
-          <QuantitiesCalculationsStep
+          <ItemUploadStep
             entries={rfqData.straightPipeEntries}
+            globalSpecs={rfqData.globalSpecs}
+            masterData={masterData}
+            onAddEntry={addStraightPipeEntry}
             onUpdateEntry={updateStraightPipeEntry}
+            onRemoveEntry={removeStraightPipeEntry}
             onCalculate={handleCalculateAll}
             errors={validationErrors}
             loading={false}
@@ -885,7 +1207,16 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
         {/* Main Content */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="px-6 py-8">
-            {renderCurrentStep()}
+            {isLoadingMasterData ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="flex items-center space-x-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="text-gray-600">Loading system data...</span>
+                </div>
+              </div>
+            ) : (
+              renderCurrentStep()
+            )}
           </div>
 
           {/* Navigation */}
