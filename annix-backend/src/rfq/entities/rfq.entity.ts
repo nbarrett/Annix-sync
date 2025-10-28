@@ -19,63 +19,63 @@ export class Rfq {
   id: number;
 
   @ApiProperty({ description: 'Auto-generated RFQ number', example: 'RFQ-2025-0001' })
-  @Column({ unique: true })
+  @Column({ name: 'rfq_number', unique: true })
   rfqNumber: string;
 
   @ApiProperty({ description: 'Project name', example: '500NB Pipeline Extension' })
-  @Column()
+  @Column({ name: 'project_name' })
   projectName: string;
 
   @ApiProperty({ description: 'Project description', required: false })
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'description', type: 'text', nullable: true })
   description?: string;
 
   @ApiProperty({ description: 'Customer company name', required: false })
-  @Column({ nullable: true })
+  @Column({ name: 'customer_name', nullable: true })
   customerName?: string;
 
   @ApiProperty({ description: 'Customer email', required: false })
-  @Column({ nullable: true })
+  @Column({ name: 'customer_email', nullable: true })
   customerEmail?: string;
 
   @ApiProperty({ description: 'Customer phone number', required: false })
-  @Column({ nullable: true })
+  @Column({ name: 'customer_phone', nullable: true })
   customerPhone?: string;
 
   @ApiProperty({ description: 'Required delivery date', required: false })
-  @Column({ type: 'date', nullable: true })
+  @Column({ name: 'required_date', type: 'date', nullable: true })
   requiredDate?: Date;
 
   @ApiProperty({ description: 'RFQ status', enum: RfqStatus })
-  @Column({ type: 'enum', enum: RfqStatus, default: RfqStatus.DRAFT })
+  @Column({ name: 'status', type: 'enum', enum: RfqStatus, default: RfqStatus.DRAFT })
   status: RfqStatus;
 
   @ApiProperty({ description: 'Additional notes', required: false })
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'notes', type: 'text', nullable: true })
   notes?: string;
 
   @ApiProperty({ description: 'Total estimated weight in kg', required: false })
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'total_estimated_weight', type: 'decimal', precision: 10, scale: 2, nullable: true })
   totalWeightKg?: number;
 
   @ApiProperty({ description: 'Total estimated cost', required: false })
-  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  @Column({ name: 'total_quoted_price', type: 'decimal', precision: 15, scale: 2, nullable: true })
   totalCost?: number;
 
-  @ApiProperty({ description: 'User who created this RFQ', type: () => User })
-  @ManyToOne(() => User, (user) => user.rfqs)
-  @JoinColumn({ name: 'created_by_id' })
-  createdBy: User;
+  @ApiProperty({ description: 'User who created this RFQ', type: () => User, required: false })
+  @ManyToOne(() => User, (user) => user.rfqs, { nullable: true })
+  @JoinColumn({ name: 'created_by_user_id' })
+  createdBy?: User;
 
   @ApiProperty({ description: 'RFQ items', type: () => [RfqItem] })
   @OneToMany(() => RfqItem, (item) => item.rfq, { cascade: true })
   items: RfqItem[];
 
   @ApiProperty({ description: 'Creation date' })
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
   @ApiProperty({ description: 'Last update date' })
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

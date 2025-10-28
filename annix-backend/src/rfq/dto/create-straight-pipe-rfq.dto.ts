@@ -26,6 +26,11 @@ export class CreateStraightPipeRfqDto {
   @Type(() => Number)
   wallThicknessMm?: number;
 
+  @ApiProperty({ description: 'Pipe end configuration', example: 'FBE', required: false })
+  @IsOptional()
+  @IsString()
+  pipeEndConfiguration?: string;
+
   @ApiProperty({ description: 'Individual pipe length', example: 12.192 })
   @IsNumber({ maxDecimalPlaces: 3 })
   @IsPositive()

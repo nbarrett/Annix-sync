@@ -17,6 +17,7 @@ export interface CreateStraightPipeRfqDto {
   scheduleType: 'schedule' | 'wall_thickness';
   scheduleNumber?: string;
   wallThicknessMm?: number;
+  pipeEndConfiguration?: 'FBE' | 'FOE' | 'PE' | 'FOE_LF' | 'FOE_RF' | '2X_RF'; // NEW FIELD
   individualPipeLength: number;
   lengthUnit: 'meters' | 'feet';
   quantityType: 'total_length' | 'number_of_pipes';
@@ -249,6 +250,7 @@ class ApiClient {
     schedule?: string;
     wallThickness: number;
     maxPressure: number;
+    availableUpgrades?: PipeDimension[];
   }> {
     return this.request('/pipe-dimensions/recommend', {
       method: 'POST',
@@ -259,6 +261,27 @@ class ApiClient {
         steelSpecId
       }),
     });
+  }
+
+  async getHigherSchedules(
+    nominalBore: number,
+    currentWallThickness: number,
+    workingPressure: number,
+    temperature: number = 20,
+    steelSpecId?: number
+  ): Promise<PipeDimension[]> {
+    const params = new URLSearchParams({
+      nominalBore: nominalBore.toString(),
+      currentWallThickness: currentWallThickness.toString(),
+      workingPressure: workingPressure.toString(),
+      temperature: temperature.toString(),
+    });
+    
+    if (steelSpecId) {
+      params.append('steelSpecId', steelSpecId.toString());
+    }
+
+    return this.request<PipeDimension[]>(`/pipe-dimensions/higher-schedules?${params}`);
   }
 }
 
@@ -284,6 +307,8 @@ export const masterDataApi = {
   getNominalBores: (steelSpecId?: number) => apiClient.getNominalBores(steelSpecId),
   getRecommendedSpecs: (nominalBore: number, workingPressure: number, temperature?: number, steelSpecId?: number) =>
     apiClient.getRecommendedSpecs(nominalBore, workingPressure, temperature, steelSpecId),
+  getHigherSchedules: (nominalBore: number, currentWallThickness: number, workingPressure: number, temperature?: number, steelSpecId?: number) =>
+    apiClient.getHigherSchedules(nominalBore, currentWallThickness, workingPressure, temperature, steelSpecId),
 };
 
 export const authApi = {

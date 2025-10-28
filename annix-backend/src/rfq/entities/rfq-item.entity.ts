@@ -16,40 +16,40 @@ export class RfqItem {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @ApiProperty({ description: 'Line number in the RFQ', example: 1 })
+  @Column({ name: 'line_number', type: 'int' })
+  lineNumber: number;
+
   @ApiProperty({ description: 'Item description', example: '500NB Sch20 Straight Pipe for 10 Bar Pipeline' })
-  @Column()
+  @Column({ name: 'description' })
   description: string;
 
   @ApiProperty({ description: 'Type of RFQ item', enum: RfqItemType })
-  @Column({ type: 'enum', enum: RfqItemType })
+  @Column({ name: 'item_type', type: 'enum', enum: RfqItemType })
   itemType: RfqItemType;
 
   @ApiProperty({ description: 'Quantity required', example: 656 })
-  @Column({ type: 'int' })
+  @Column({ name: 'quantity', type: 'int' })
   quantity: number;
 
-  @ApiProperty({ description: 'Unit of measurement', example: 'pieces' })
-  @Column({ default: 'pieces' })
-  unit: string;
-
   @ApiProperty({ description: 'Estimated weight per unit in kg', required: false })
-  @Column({ type: 'decimal', precision: 10, scale: 3, nullable: true })
+  @Column({ name: 'weight_per_unit_kg', type: 'decimal', precision: 10, scale: 3, nullable: true })
   weightPerUnitKg?: number;
 
   @ApiProperty({ description: 'Total estimated weight in kg', required: false })
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'total_weight_kg', type: 'decimal', precision: 10, scale: 2, nullable: true })
   totalWeightKg?: number;
 
   @ApiProperty({ description: 'Unit price', required: false })
-  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  @Column({ name: 'unit_price', type: 'decimal', precision: 15, scale: 2, nullable: true })
   unitPrice?: number;
 
   @ApiProperty({ description: 'Total price', required: false })
-  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  @Column({ name: 'total_price', type: 'decimal', precision: 15, scale: 2, nullable: true })
   totalPrice?: number;
 
   @ApiProperty({ description: 'Additional notes', required: false })
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'notes', type: 'text', nullable: true })
   notes?: string;
 
   @ApiProperty({ description: 'Parent RFQ', type: () => Rfq })
