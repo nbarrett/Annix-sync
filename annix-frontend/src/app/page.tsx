@@ -42,6 +42,12 @@ export default function RfqPage() {
               Create Another RFQ
             </button>
             <button
+              onClick={() => window.location.href = '/rfqs'}
+              className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold"
+            >
+              View All RFQs
+            </button>
+            <button
               onClick={() => window.location.href = '/'}
               className="w-full px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-semibold"
             >
@@ -65,6 +71,12 @@ export default function RfqPage() {
               className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
             >
               Start New RFQ
+            </button>
+            <button
+              onClick={() => window.location.href = '/rfqs'}
+              className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold"
+            >
+              View All RFQs
             </button>
             <button
               onClick={() => window.location.href = '/'}

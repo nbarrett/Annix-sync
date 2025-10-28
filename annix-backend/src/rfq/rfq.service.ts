@@ -266,8 +266,6 @@ export class RfqService {
         'items',
         'items.straightPipeDetails',
         'items.straightPipeDetails.steelSpecification',
-        'items.straightPipeDetails.flangeStandard',
-        'items.straightPipeDetails.flangePressureClass',
       ],
     });
 
