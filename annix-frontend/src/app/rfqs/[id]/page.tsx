@@ -85,7 +85,7 @@ export default function RfqDetailsPage() {
   const fetchRfqDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:4001/rfq/${id}`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/rfq/${id}`);
       if (!response.ok) {
         throw new Error('Failed to fetch RFQ details');
       }
