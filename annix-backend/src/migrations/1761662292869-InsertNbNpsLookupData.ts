@@ -5,6 +5,15 @@ export class InsertNbNpsLookupData1761662292869 implements MigrationInterface {
     public async up(queryRunner: QueryRunner): Promise<void> {
         console.log('🔧 Inserting NB-NPS lookup data...');
         
+        // First, check if data already exists
+        const result = await queryRunner.query(`SELECT COUNT(*) FROM nb_nps_lookup`);
+        const count = parseInt(result[0].count);
+        
+        if (count > 0) {
+            console.log('✅ NB-NPS lookup data already exists, skipping...');
+            return;
+        }
+        
         await queryRunner.query(`
             INSERT INTO nb_nps_lookup (nb_mm, nps_inch, outside_diameter_mm) VALUES
             -- Small Bore Pipes
@@ -53,7 +62,6 @@ export class InsertNbNpsLookupData1761662292869 implements MigrationInterface {
             (1600, 64, 1625.6),    -- 64"
             (1800, 72, 1828.8),    -- 72"
             (1900, 76, 1930.4)     -- 76"
-            ON CONFLICT (nb_mm) DO NOTHING
         `);
         
         console.log('✅ NB-NPS lookup data inserted successfully');
