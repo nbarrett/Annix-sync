@@ -23,7 +23,7 @@ RUN yarn install --frozen-lockfile --production
 # Copy built app from builder
 COPY --from=builder /usr/src/app/dist ./dist
 COPY --from=builder /usr/src/app/src/config/data-source.ts ./src/config/data-source.ts
-COPY --from=builder /usr/src/app/src/migration ./src/migration
+COPY --from=builder /usr/src/app/src/migrations ./src/migrations
 
 EXPOSE 4000
 
