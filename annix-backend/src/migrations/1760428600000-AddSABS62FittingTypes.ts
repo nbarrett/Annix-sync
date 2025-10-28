@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddSABS62FittingTypes1729598500000 implements MigrationInterface {
+export class AddSABS62FittingTypes1760428600000 implements MigrationInterface {
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         // Insert SABS 62 fitting types

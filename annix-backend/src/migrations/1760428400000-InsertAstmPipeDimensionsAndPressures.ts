@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class InsertAstmPipeDimensionsAndPressures1729500000000 implements MigrationInterface {
-    name = 'InsertAstmPipeDimensionsAndPressures1729500000000';
+export class InsertAstmPipeDimensionsAndPressures1760428400000 implements MigrationInterface {
+    name = 'InsertAstmPipeDimensionsAndPressures1760428400000';
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         console.log('🚀 Starting ASTM pipe data insertion...');

@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddSABS719PipeData1729598600000 implements MigrationInterface {
+export class AddSABS719PipeData1760428700000 implements MigrationInterface {
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         // Insert SABS 719 steel specification
