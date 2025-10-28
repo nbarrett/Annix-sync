@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, ParseIntPipe, Query } from '@nestjs/common';
 import { PipeDimensionService } from './pipe-dimension.service';
 import { PipeDimension } from './entities/pipe-dimension.entity';
 import { CreatePipeDimensionDto } from './dto/create-pipe-dimension.dto';
-import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { UpdatePipeDimensionDto } from './dto/update-pipe-dimension.dto';
 
 @Controller('pipe-dimensions')
@@ -82,6 +82,30 @@ export class PipeDimensionController {
       body.workingPressure,
       body.temperature || 20,
       body.steelSpecId
+    );
+  }
+
+  @Get('higher-schedules')
+  @ApiOperation({ summary: 'Get higher schedule options than recommended minimum' })
+  @ApiQuery({ name: 'nominalBore', type: Number, description: 'Nominal bore in mm', required: true })
+  @ApiQuery({ name: 'currentWallThickness', type: Number, description: 'Current wall thickness in mm', required: true })
+  @ApiQuery({ name: 'workingPressure', type: Number, description: 'Working pressure in bar', required: true })
+  @ApiQuery({ name: 'temperature', type: Number, required: false, description: 'Temperature in °C (default: 20)' })
+  @ApiQuery({ name: 'steelSpecId', type: Number, required: false, description: 'Steel specification ID' })
+  @ApiResponse({ status: 200, description: 'List of higher schedule options', type: [PipeDimension] })
+  async getHigherSchedules(
+    @Query('nominalBore') nominalBore: string,
+    @Query('currentWallThickness') currentWallThickness: string,
+    @Query('workingPressure') workingPressure: string,
+    @Query('temperature') temperature?: string,
+    @Query('steelSpecId') steelSpecId?: string,
+  ) {
+    return this.pipeDimensionService.getHigherSchedules(
+      parseFloat(nominalBore),
+      parseFloat(currentWallThickness),
+      parseFloat(workingPressure),
+      temperature ? parseFloat(temperature) : 20,
+      steelSpecId ? parseInt(steelSpecId) : undefined
     );
   }
 

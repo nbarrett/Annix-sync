@@ -197,6 +197,7 @@ export class PipeDimensionService {
     schedule?: string;
     wallThickness: number;
     maxPressure: number;
+    availableUpgrades?: PipeDimension[];
   }> {
     // Find nominal outside diameter that matches the bore
     const nominal = await this.nominalRepo.findOne({ 
@@ -206,6 +207,9 @@ export class PipeDimensionService {
     if (!nominal) {
       throw new NotFoundException(`No pipe dimensions found for ${nominalBore}mm nominal bore`);
     }
+
+    // Convert working pressure from bar to MPa (1 bar = 0.1 MPa)
+    const workingPressureMpa = workingPressure * 0.1;
 
     // Build query to find pipe dimensions
     let query = this.pipeRepo
@@ -220,30 +224,113 @@ export class PipeDimensionService {
       query = query.andWhere('steel.id = :steelSpecId', { steelSpecId });
     }
 
-    // Filter by pressure rating - find pipes with pressure >= working pressure
+    // Filter by pressure rating - find pipes with adequate pressure rating
+    // The pressure rating should be at or above the working pressure at the specified temperature
     query = query
-      .andWhere('pressure.temperature_c IS NOT NULL AND pressure.temperature_c <= :temperature', { temperature })
-      .andWhere('pressure.max_working_pressure_mpa IS NOT NULL AND pressure.max_working_pressure_mpa >= :workingPressure', { workingPressure })
-      .orderBy('pipe.wall_thickness_mm', 'ASC'); // Start with thinnest wall
+      .andWhere('pressure.temperature_c IS NOT NULL')
+      .andWhere('pressure.temperature_c >= :temperature', { temperature })
+      .andWhere('pressure.max_working_pressure_mpa IS NOT NULL')
+      .andWhere('pressure.max_working_pressure_mpa >= :workingPressureMpa', { workingPressureMpa });
 
     const suitablePipes = await query.getMany();
     
     if (suitablePipes.length === 0) {
-      throw new NotFoundException(`No suitable pipe dimensions found for the given conditions`);
+      throw new NotFoundException(
+        `No suitable pipe dimensions found for ${nominalBore}mm NB at ${workingPressure} bar and ${temperature}°C`
+      );
     }
 
-    // Return the first suitable pipe (thinnest wall thickness that meets requirements)
-    const recommendedPipe = suitablePipes[0];
-    const suitablePressure = recommendedPipe.pressures.find(p => 
-      (p.temperature_c !== null && p.temperature_c <= temperature) && 
-      (p.max_working_pressure_mpa !== null && p.max_working_pressure_mpa >= workingPressure)
-    );
+    // Sort by schedule preference to get the most economical option first
+    // Priority: STD (Sch40) > Sch80 > Sch120 > Sch160 > others
+    const sortedPipes = suitablePipes.sort((a, b) => {
+      const getSchedulePriority = (pipe: PipeDimension): number => {
+        // STD or Sch40 is the most common and economical
+        if (pipe.schedule_designation === 'STD' || pipe.schedule_number === 40) return 1;
+        if (pipe.schedule_number === 80 || pipe.schedule_designation === 'XS') return 2;
+        if (pipe.schedule_number === 120) return 3;
+        if (pipe.schedule_number === 160 || pipe.schedule_designation === 'XXS') return 4;
+        if (pipe.schedule_number) return pipe.schedule_number;
+        // For pipes without schedule numbers, sort by wall thickness
+        return 100 + (pipe.wall_thickness_mm * 10);
+      };
+      
+      return getSchedulePriority(a) - getSchedulePriority(b);
+    });
+
+    // The recommended pipe is the first one (minimum acceptable schedule)
+    const recommendedPipe = sortedPipes[0];
+    
+    // Find all higher schedules available for potential upgrade
+    const recommendedScheduleNum = this.getScheduleNumber(recommendedPipe);
+    const availableUpgrades = sortedPipes.filter(pipe => {
+      const pipeScheduleNum = this.getScheduleNumber(pipe);
+      return pipeScheduleNum > recommendedScheduleNum;
+    });
+
+    // Get the pressure rating for the recommended pipe at the specified temperature
+    const suitablePressure = recommendedPipe.pressures
+      .filter(p => p.temperature_c !== null && p.temperature_c >= temperature)
+      .sort((a, b) => (a.temperature_c || 0) - (b.temperature_c || 0))[0];
+
+    const schedule = recommendedPipe.schedule_designation || 
+                    (recommendedPipe.schedule_number ? `Sch${recommendedPipe.schedule_number}` : 'STD');
 
     return {
       pipeDimension: recommendedPipe,
-      schedule: recommendedPipe.schedule_designation || `Sch${recommendedPipe.schedule_number || 'STD'}`,
+      schedule,
       wallThickness: recommendedPipe.wall_thickness_mm,
-      maxPressure: suitablePressure?.max_working_pressure_mpa || 0
+      maxPressure: (suitablePressure?.max_working_pressure_mpa || 0) * 10, // Convert MPa to bar
+      availableUpgrades
     };
+  }
+
+  // Helper method to get numeric schedule value for comparison
+  private getScheduleNumber(pipe: PipeDimension): number {
+    if (pipe.schedule_number) return pipe.schedule_number;
+    if (pipe.schedule_designation === 'STD') return 40;
+    if (pipe.schedule_designation === 'XS') return 80;
+    if (pipe.schedule_designation === 'XXS') return 160;
+    // For pipes without standard schedules, use wall thickness * 10 as proxy
+    return pipe.wall_thickness_mm * 10;
+  }
+
+  // New method to get all valid higher schedules for manual override
+  async getHigherSchedules(
+    nominalBore: number,
+    currentWallThickness: number,
+    workingPressure: number,
+    temperature: number = 20,
+    steelSpecId?: number
+  ): Promise<PipeDimension[]> {
+    const nominal = await this.nominalRepo.findOne({ 
+      where: { nominal_diameter_mm: nominalBore } 
+    });
+    
+    if (!nominal) {
+      throw new NotFoundException(`No pipe dimensions found for ${nominalBore}mm nominal bore`);
+    }
+
+    const workingPressureMpa = workingPressure * 0.1;
+
+    let query = this.pipeRepo
+      .createQueryBuilder('pipe')
+      .leftJoinAndSelect('pipe.nominalOutsideDiameter', 'nominal')
+      .leftJoinAndSelect('pipe.steelSpecification', 'steel')
+      .leftJoinAndSelect('pipe.pressures', 'pressure')
+      .where('nominal.id = :nominalId', { nominalId: nominal.id })
+      .andWhere('pipe.wall_thickness_mm > :currentWallThickness', { currentWallThickness })
+      .andWhere('pressure.temperature_c IS NOT NULL')
+      .andWhere('pressure.temperature_c >= :temperature', { temperature })
+      .andWhere('pressure.max_working_pressure_mpa IS NOT NULL')
+      .andWhere('pressure.max_working_pressure_mpa >= :workingPressureMpa', { workingPressureMpa });
+
+    if (steelSpecId) {
+      query = query.andWhere('steel.id = :steelSpecId', { steelSpecId });
+    }
+
+    const higherSchedules = await query.getMany();
+    
+    // Sort by wall thickness ascending (show closest upgrades first)
+    return higherSchedules.sort((a, b) => a.wall_thickness_mm - b.wall_thickness_mm);
   }
 }

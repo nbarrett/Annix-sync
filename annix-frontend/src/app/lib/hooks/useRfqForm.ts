@@ -11,6 +11,11 @@ export interface StraightPipeEntry {
   calculation?: StraightPipeCalculationResult;
   calculatedPipes?: number;
   notes?: string;
+  // Schedule override tracking
+  isScheduleOverridden?: boolean;
+  minimumSchedule?: string;
+  minimumWallThickness?: number;
+  availableUpgrades?: any[];
 }
 
 export interface GlobalSpecs {
@@ -34,16 +39,17 @@ export interface RfqFormData {
 }
 
 const DEFAULT_PIPE_SPECS: CreateStraightPipeRfqDto = {
-  nominalBoreMm: 500,
+  nominalBoreMm: 100,  // Changed to smaller, more common size
   scheduleType: 'schedule',
-  scheduleNumber: 'Sch20',
+  scheduleNumber: 'Sch40',  // Changed to Sch40 which exists for most NBs
+  pipeEndConfiguration: 'PE', // Default to plain ended
   individualPipeLength: 12.192,
   lengthUnit: 'meters',
   quantityType: 'total_length',
-  quantityValue: 8000,
+  quantityValue: 1000,  // Changed to smaller test value
   workingPressureBar: 10,
-  workingTemperatureC: 120,
-  steelSpecificationId: 1,
+  workingTemperatureC: 20,  // Changed to room temperature default
+  steelSpecificationId: 2,  // ASTM A106 Grade B - matches 100NB Sch40 in database
 };
 
 export const useRfqForm = () => {
@@ -70,7 +76,7 @@ export const useRfqForm = () => {
   const addStraightPipeEntry = useCallback((description?: string) => {
     const newEntry: StraightPipeEntry = {
       id: Date.now().toString(),
-      description: description || `${DEFAULT_PIPE_SPECS.nominalBoreMm}NB ${DEFAULT_PIPE_SPECS.scheduleNumber} Straight Pipe`,
+      description: description || `${DEFAULT_PIPE_SPECS.nominalBoreMm}NB ${DEFAULT_PIPE_SPECS.scheduleNumber} Straight Pipe for ${DEFAULT_PIPE_SPECS.workingPressureBar} Bar Pipeline`,
       specs: { ...DEFAULT_PIPE_SPECS },
       notes: 'All pipes to be hydrostatically tested before delivery',
     };
