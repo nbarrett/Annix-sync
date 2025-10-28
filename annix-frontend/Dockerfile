@@ -43,6 +43,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+ENV NEXT_PUBLIC_API_URL=annix.tytodev.online/api
+
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 EXPOSE 3000
