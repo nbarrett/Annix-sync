@@ -8,6 +8,9 @@ import { User } from '../user/entities/user.entity';
 import { SteelSpecification } from '../steel-specification/entities/steel-specification.entity';
 import { PipeDimension } from '../pipe-dimension/entities/pipe-dimension.entity';
 import { NbNpsLookup } from '../nb-nps-lookup/entities/nb-nps-lookup.entity';
+import { FlangeDimension } from '../flange-dimension/entities/flange-dimension.entity';
+import { BoltMass } from '../bolt-mass/entities/bolt-mass.entity';
+import { NutMass } from '../nut-mass/entities/nut-mass.entity';
 import { CreateStraightPipeRfqWithItemDto } from './dto/create-rfq-item.dto';
 import { StraightPipeCalculationResultDto, RfqResponseDto } from './dto/rfq-response.dto';
 
@@ -28,6 +31,12 @@ export class RfqService {
     private pipeDimensionRepository: Repository<PipeDimension>,
     @InjectRepository(NbNpsLookup)
     private nbNpsLookupRepository: Repository<NbNpsLookup>,
+    @InjectRepository(FlangeDimension)
+    private flangeDimensionRepository: Repository<FlangeDimension>,
+    @InjectRepository(BoltMass)
+    private boltMassRepository: Repository<BoltMass>,
+    @InjectRepository(NutMass)
+    private nutMassRepository: Repository<NutMass>,
   ) {}
 
   async calculateStraightPipeRequirements(
@@ -47,12 +56,28 @@ export class RfqService {
       }
     }
 
+    // Normalize schedule number format (convert "Sch40" to "40", etc.)
+    const normalizeScheduleNumber = (scheduleNumber: string): string => {
+      if (!scheduleNumber) return scheduleNumber;
+      
+      // Convert "Sch40" -> "40", "Sch80" -> "80", etc.
+      const schMatch = scheduleNumber.match(/^[Ss]ch(\d+)$/);
+      if (schMatch) {
+        return schMatch[1];
+      }
+      
+      // Return as-is for other formats (STD, XS, XXS, MEDIUM, HEAVY, etc.)
+      return scheduleNumber;
+    };
+
     // Find pipe dimension based on schedule type
     if (dto.scheduleType === ScheduleType.SCHEDULE && dto.scheduleNumber) {
+      const normalizedSchedule = normalizeScheduleNumber(dto.scheduleNumber);
+      
       pipeDimension = await this.pipeDimensionRepository.findOne({
         where: {
           nominalOutsideDiameter: { nominal_diameter_mm: dto.nominalBoreMm },
-          schedule_designation: dto.scheduleNumber,
+          schedule_designation: normalizedSchedule,
           ...(steelSpec && { steelSpecification: { id: steelSpec.id } }),
         },
         relations: ['nominalOutsideDiameter', 'steelSpecification'],
@@ -69,10 +94,12 @@ export class RfqService {
     }
 
     if (!pipeDimension) {
+      const scheduleInfo = dto.scheduleType === ScheduleType.SCHEDULE && dto.scheduleNumber
+        ? `schedule ${dto.scheduleNumber}${dto.scheduleNumber !== normalizeScheduleNumber(dto.scheduleNumber) ? ` (normalized to: ${normalizeScheduleNumber(dto.scheduleNumber)})` : ''}` 
+        : `wall thickness ${dto.wallThicknessMm}mm`;
+        
       throw new NotFoundException(
-        `Pipe dimension not found for ${dto.nominalBoreMm}NB with ${
-          dto.scheduleType === ScheduleType.SCHEDULE ? `schedule ${dto.scheduleNumber}` : `wall thickness ${dto.wallThicknessMm}mm`
-        }`,
+        `The combination of ${dto.nominalBoreMm}NB with ${scheduleInfo} is not available in the database.\n\nPlease select a different schedule (STD, XS, XXS, 40, 80, 120, 160, MEDIUM, or HEAVY) or use the automated calculation by setting working pressure.`
       );
     }
 
@@ -141,11 +168,76 @@ export class RfqService {
     const numberOfButtWelds = 0;
     const totalButtWeldLength = 0;
 
+    // Calculate flange, bolt, and nut weights
+    let totalFlangeWeight = 0;
+    let totalBoltWeight = 0;
+    let totalNutWeight = 0;
+
+    if (dto.flangeStandardId && dto.flangePressureClassId) {
+      try {
+        // Find the appropriate flange dimension
+        const flangeDimension = await this.flangeDimensionRepository.findOne({
+          where: {
+            nominalOutsideDiameter: { nominal_diameter_mm: dto.nominalBoreMm },
+            standard: { id: dto.flangeStandardId },
+            pressureClass: { id: dto.flangePressureClassId }
+          },
+          relations: ['bolt', 'nominalOutsideDiameter']
+        });
+
+        if (flangeDimension) {
+          // Calculate flange weight
+          totalFlangeWeight = numberOfFlanges * flangeDimension.mass_kg;
+
+          // Calculate bolt weight if bolt information is available
+          if (flangeDimension.bolt) {
+            // Find the closest bolt mass for reasonable length (typically 3-4 times flange thickness)
+            const estimatedBoltLengthMm = Math.max(50, flangeDimension.b * 3); // Minimum 50mm, or 3x flange thickness
+            
+            // Find the closest available bolt length
+            const boltMass = await this.boltMassRepository
+              .createQueryBuilder('bm')
+              .where('bm.bolt = :boltId', { boltId: flangeDimension.bolt.id })
+              .andWhere('bm.length_mm >= :minLength', { minLength: estimatedBoltLengthMm })
+              .orderBy('bm.length_mm', 'ASC')
+              .getOne();
+
+            if (boltMass) {
+              const totalBolts = numberOfFlanges * flangeDimension.num_holes;
+              totalBoltWeight = totalBolts * boltMass.mass_kg;
+            }
+
+            // Calculate nut weight
+            const nutMass = await this.nutMassRepository.findOne({
+              where: {
+                bolt: { id: flangeDimension.bolt.id }
+              }
+            });
+
+            if (nutMass) {
+              const totalNuts = numberOfFlanges * flangeDimension.num_holes;
+              totalNutWeight = totalNuts * nutMass.mass_kg;
+            }
+          }
+        }
+      } catch (error) {
+        // If flange weight calculation fails, log it but don't break the calculation
+        console.warn('Flange weight calculation failed:', error.message);
+        console.warn('Flange Standard ID:', dto.flangeStandardId, 'Pressure Class ID:', dto.flangePressureClassId, 'Nominal Bore:', dto.nominalBoreMm);
+      }
+    }
+
+    const totalSystemWeight = totalPipeWeight + totalFlangeWeight + totalBoltWeight + totalNutWeight;
+
     return {
       outsideDiameterMm,
       wallThicknessMm,
       pipeWeightPerMeter: Math.round(pipeWeightPerMeter * 100) / 100,
       totalPipeWeight: Math.round(totalPipeWeight),
+      totalFlangeWeight: Math.round(totalFlangeWeight * 100) / 100,
+      totalBoltWeight: Math.round(totalBoltWeight * 100) / 100,
+      totalNutWeight: Math.round(totalNutWeight * 100) / 100,
+      totalSystemWeight: Math.round(totalSystemWeight),
       calculatedPipeCount,
       calculatedTotalLength: Math.round(calculatedTotalLengthM * 100) / 100,
       numberOfFlanges,
@@ -175,7 +267,7 @@ export class RfqService {
       ...dto.rfq,
       rfqNumber,
       status: dto.rfq.status || RfqStatus.DRAFT,
-      totalWeightKg: calculation.totalPipeWeight,
+      totalWeightKg: calculation.totalSystemWeight,
       ...(user && { createdBy: user }),
     });
 
@@ -187,8 +279,8 @@ export class RfqService {
       description: dto.itemDescription,
       itemType: RfqItemType.STRAIGHT_PIPE,
       quantity: calculation.calculatedPipeCount,
-      weightPerUnitKg: calculation.pipeWeightPerMeter,
-      totalWeightKg: calculation.totalPipeWeight,
+      weightPerUnitKg: calculation.totalSystemWeight / calculation.calculatedPipeCount,
+      totalWeightKg: calculation.totalSystemWeight,
       notes: dto.itemNotes,
       rfq: savedRfq,
     });

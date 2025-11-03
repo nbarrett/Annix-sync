@@ -10,6 +10,9 @@ import { SteelSpecification } from '../steel-specification/entities/steel-specif
 import { PipeDimension } from '../pipe-dimension/entities/pipe-dimension.entity';
 import { FlangeStandard } from '../flange-standard/entities/flange-standard.entity';
 import { FlangePressureClass } from '../flange-pressure-class/entities/flange-pressure-class.entity';
+import { FlangeDimension } from '../flange-dimension/entities/flange-dimension.entity';
+import { BoltMass } from '../bolt-mass/entities/bolt-mass.entity';
+import { NutMass } from '../nut-mass/entities/nut-mass.entity';
 import { NbNpsLookup } from '../nb-nps-lookup/entities/nb-nps-lookup.entity';
 
 @Module({
@@ -23,6 +26,9 @@ import { NbNpsLookup } from '../nb-nps-lookup/entities/nb-nps-lookup.entity';
       PipeDimension,
       FlangeStandard,
       FlangePressureClass,
+      FlangeDimension,
+      BoltMass,
+      NutMass,
       NbNpsLookup,
     ]),
   ],

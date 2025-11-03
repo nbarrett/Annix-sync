@@ -41,6 +41,10 @@ export interface StraightPipeCalculationResult {
   wallThicknessMm: number;
   pipeWeightPerMeter: number;
   totalPipeWeight: number;
+  totalFlangeWeight: number;
+  totalBoltWeight: number;
+  totalNutWeight: number;
+  totalSystemWeight: number;
   calculatedPipeCount: number;
   calculatedTotalLength: number;
   numberOfFlanges: number;
@@ -182,18 +186,47 @@ class ApiClient {
   async calculateStraightPipe(
     data: CreateStraightPipeRfqDto
   ): Promise<StraightPipeCalculationResult> {
+    // Normalize schedule format before sending to backend
+    const normalizedData = {
+      ...data,
+      scheduleNumber: this.normalizeScheduleNumber(data.scheduleNumber)
+    };
+    
     return this.request<StraightPipeCalculationResult>('/rfq/straight-pipe/calculate', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(normalizedData),
     });
+  }
+
+  // Helper function to normalize schedule numbers
+  private normalizeScheduleNumber(scheduleNumber?: string): string | undefined {
+    if (!scheduleNumber) return scheduleNumber;
+    
+    // Convert "Sch40" -> "40", "Sch80" -> "80", etc.
+    const schMatch = scheduleNumber.match(/^[Ss]ch(\d+)$/);
+    if (schMatch) {
+      return schMatch[1];
+    }
+    
+    // Return as-is for other formats (STD, XS, XXS, MEDIUM, HEAVY, etc.)
+    return scheduleNumber;
   }
 
   async createStraightPipeRfq(
     data: CreateStraightPipeRfqWithItemDto
   ): Promise<{ rfq: any; calculation: StraightPipeCalculationResult }> {
+    // Normalize schedule format in straightPipe data
+    const normalizedData = {
+      ...data,
+      straightPipe: {
+        ...data.straightPipe,
+        scheduleNumber: this.normalizeScheduleNumber(data.straightPipe.scheduleNumber)
+      }
+    };
+    
     return this.request('/rfq/straight-pipe', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(normalizedData),
     });
   }
 

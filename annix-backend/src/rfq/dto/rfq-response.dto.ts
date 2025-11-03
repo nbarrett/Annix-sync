@@ -13,6 +13,18 @@ export class StraightPipeCalculationResultDto {
   @ApiProperty({ description: 'Total pipe weight in kg', example: 1467460 })
   totalPipeWeight: number;
 
+  @ApiProperty({ description: 'Total flange weight in kg', example: 1050.24 })
+  totalFlangeWeight: number;
+
+  @ApiProperty({ description: 'Total bolt weight in kg', example: 156.32 })
+  totalBoltWeight: number;
+
+  @ApiProperty({ description: 'Total nut weight in kg', example: 78.16 })
+  totalNutWeight: number;
+
+  @ApiProperty({ description: 'Total weight including pipes, flanges, bolts and nuts in kg', example: 1468744.72 })
+  totalSystemWeight: number;
+
   @ApiProperty({ description: 'Calculated number of pipes', example: 656 })
   calculatedPipeCount: number;
 

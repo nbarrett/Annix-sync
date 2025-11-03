@@ -41,7 +41,7 @@ export interface RfqFormData {
 const DEFAULT_PIPE_SPECS: CreateStraightPipeRfqDto = {
   nominalBoreMm: 100,  // Changed to smaller, more common size
   scheduleType: 'schedule',
-  scheduleNumber: 'Sch40',  // Changed to Sch40 which exists for most NBs
+  scheduleNumber: '40',  // Fixed to use database format
   pipeEndConfiguration: 'PE', // Default to plain ended
   individualPipeLength: 12.192,
   lengthUnit: 'meters',
