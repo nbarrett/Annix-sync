@@ -449,7 +449,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
 
   const getTotalWeight = () => {
     return entries.reduce((total: number, entry: StraightPipeEntry) => {
-      const entryTotal = (entry.calculation?.totalPipeWeight || 0);
+      const entryTotal = (entry.calculation?.totalSystemWeight || 0);
       return total + entryTotal;
     }, 0);
   };
@@ -720,7 +720,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                                 const isDowngrade = entry.minimumSchedule && newSchedule && 
                                   entry.availableUpgrades && 
                                   !entry.availableUpgrades.some((u: any) => 
-                                    (u.schedule_designation || `Sch${u.schedule_number}`) === newSchedule
+                                    (u.schedule_designation || u.schedule_number?.toString()) === newSchedule
                                   ) && newSchedule !== entry.minimumSchedule;
                                 
                                 if (isDowngrade) {
@@ -739,10 +739,12 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                               <option value="STD">STD (Standard)</option>
                               <option value="XS">XS (Extra Strong)</option>
                               <option value="XXS">XXS (Double Extra Strong)</option>
-                              <option value="Sch40">Sch40</option>
-                              <option value="Sch80">Sch80</option>
-                              <option value="Sch120">Sch120</option>
-                              <option value="Sch160">Sch160</option>
+                              <option value="40">Schedule 40</option>
+                              <option value="80">Schedule 80</option>
+                              <option value="120">Schedule 120</option>
+                              <option value="160">Schedule 160</option>
+                              <option value="MEDIUM">Medium</option>
+                              <option value="HEAVY">Heavy</option>
                             </select>
                           </div>
 
@@ -788,7 +790,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                                         ...entry,
                                         specs: {
                                           ...entry.specs,
-                                          scheduleNumber: upgrade.schedule_designation || `Sch${upgrade.schedule_number}`,
+                                          scheduleNumber: upgrade.schedule_designation || upgrade.schedule_number?.toString(),
                                           wallThicknessMm: upgrade.wall_thickness_mm,
                                         },
                                         isScheduleOverridden: true
@@ -796,7 +798,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                                     }}
                                     className="block w-full text-left px-2 py-1 hover:bg-green-100 rounded text-xs"
                                   >
-                                    → {upgrade.schedule_designation || `Sch${upgrade.schedule_number}`} ({upgrade.wall_thickness_mm}mm)
+                                    → {upgrade.schedule_designation || upgrade.schedule_number?.toString()} ({upgrade.wall_thickness_mm}mm)
                                   </button>
                                 ))}
                               </div>
@@ -820,10 +822,12 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                           <option value="STD">STD (Standard)</option>
                           <option value="XS">XS (Extra Strong)</option>
                           <option value="XXS">XXS (Double Extra Strong)</option>
-                          <option value="Sch40">Sch40</option>
-                          <option value="Sch80">Sch80</option>
-                          <option value="Sch120">Sch120</option>
-                          <option value="Sch160">Sch160</option>
+                          <option value="40">Schedule 40</option>
+                          <option value="80">Schedule 80</option>
+                          <option value="120">Schedule 120</option>
+                          <option value="160">Schedule 160</option>
+                          <option value="MEDIUM">Medium</option>
+                          <option value="HEAVY">Heavy</option>
                         </select>
                         <p className="mt-0.5 text-xs text-gray-700">
                           Select a standard schedule. If the combination is not available in the database, you'll see an error when calculating.
@@ -1034,11 +1038,32 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
 
                       {/* Weight */}
                       <div className="bg-white p-2 rounded">
-                        <p className="text-xs text-gray-700 font-medium mb-1">Total Pipe Weight</p>
-                        <p className="text-xl font-bold text-blue-900">{formatWeight(entry.calculation.totalPipeWeight)}</p>
-                        <p className="text-xs text-gray-700 mt-0.5">
-                          {entry.calculation.pipeWeightPerMeter?.toFixed(3)} kg/m × {entry.calculation.calculatedPipeCount} pipes
-                        </p>
+                        <p className="text-xs text-gray-700 font-medium mb-1">Total System Weight</p>
+                        <p className="text-xl font-bold text-blue-900">{formatWeight(entry.calculation.totalSystemWeight)}</p>
+                        <div className="text-xs text-gray-700 mt-0.5 space-y-0.5">
+                          <div className="flex justify-between">
+                            <span>Pipes:</span>
+                            <span>{formatWeight(entry.calculation.totalPipeWeight)}</span>
+                          </div>
+                          {entry.calculation.totalFlangeWeight > 0 && (
+                            <div className="flex justify-between">
+                              <span>Flanges:</span>
+                              <span>{formatWeight(entry.calculation.totalFlangeWeight)}</span>
+                            </div>
+                          )}
+                          {entry.calculation.totalBoltWeight > 0 && (
+                            <div className="flex justify-between">
+                              <span>Bolts:</span>
+                              <span>{formatWeight(entry.calculation.totalBoltWeight)}</span>
+                            </div>
+                          )}
+                          {entry.calculation.totalNutWeight > 0 && (
+                            <div className="flex justify-between">
+                              <span>Nuts:</span>
+                              <span>{formatWeight(entry.calculation.totalNutWeight)}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Flanges */}
@@ -1115,7 +1140,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
 function ReviewSubmitStep({ entries, rfqData, onSubmit, errors, loading }: any) {
   const getTotalWeight = () => {
     return entries.reduce((total: number, entry: StraightPipeEntry) => {
-      return total + (entry.calculation?.totalPipeWeight || 0);
+      return total + (entry.calculation?.totalSystemWeight || 0);
     }, 0);
   };
 
@@ -1169,7 +1194,7 @@ function ReviewSubmitStep({ entries, rfqData, onSubmit, errors, loading }: any) 
                   <h4 className="font-medium text-gray-800">Pipe #{index + 1}</h4>
                   <span className="text-sm text-gray-600">
                     {entry.calculation ? 
-                      `${entry.calculation.totalPipeWeight.toFixed(2)} kg` : 
+                      `${entry.calculation.totalSystemWeight.toFixed(2)} kg` : 
                       'Not calculated'
                     }
                   </span>
@@ -1356,7 +1381,7 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
           // Show user-friendly error message
           const errorMessage = error.message || String(error);
           if (errorMessage.includes('404') || errorMessage.includes('not found')) {
-            alert(`Could not calculate for item: ${entry.description || 'Untitled'}\n\nThe combination of ${entry.specs.nominalBoreMm}NB with schedule ${entry.specs.scheduleNumber} is not available in the database.\n\nPlease select a different schedule (STD, XS, XXS, Sch40, Sch80, Sch120, or Sch160) or use the automated calculation by setting working pressure.`);
+            alert(`Could not calculate for item: ${entry.description || 'Untitled'}\n\nThe combination of ${entry.specs.nominalBoreMm}NB with schedule ${entry.specs.scheduleNumber} is not available in the database.\n\nPlease select a different schedule (STD, XS, XXS, 40, 80, 120, 160, MEDIUM, or HEAVY) or use the automated calculation by setting working pressure.`);
           } else {
             alert(`Calculation error for item: ${entry.description || 'Untitled'}\n\n${errorMessage}`);
           }
