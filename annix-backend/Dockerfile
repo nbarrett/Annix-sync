@@ -27,4 +27,4 @@ COPY --from=builder /usr/src/app/src/migrations ./src/migrations
 
 EXPOSE 4000
 
-CMD ["sh", "-c", "yarn migration:run && node dist/main"]
+CMD ["sh", "-c", "node dist/main"]
