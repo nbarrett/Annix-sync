@@ -1,11 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
-import MultiStepStraightPipeRfqForm from '@/app/components/rfq/MultiStepStraightPipeRfqForm';
+import UnifiedMultiStepRfqForm from '@/app/components/rfq/UnifiedMultiStepRfqForm';
 
-export default function RfqPage() {
-  const [showForm, setShowForm] = useState(true);
+export default function HomePage() {
+  const [showForm, setShowForm] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<string | null>(null);
+
+  const handleGetStarted = () => {
+    setShowForm(true);
+  };
 
   const handleFormSuccess = (rfqId: string) => {
     console.log('RFQ submitted successfully:', rfqId);
@@ -23,6 +27,39 @@ export default function RfqPage() {
     setSubmissionResult(null);
   };
 
+  if (!showForm && !submissionResult) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="max-w-md mx-auto bg-white rounded-lg shadow-lg p-8 text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">Annix RFQ System</h1>
+          <p className="text-gray-600 mb-8">Create requests for quotation for pipeline projects</p>
+          
+          <button
+            onClick={handleGetStarted}
+            className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-lg mb-4"
+          >
+            Create New RFQ
+          </button>
+          
+          <div className="text-sm text-gray-500">
+            <p className="mb-2">Choose from:</p>
+            <p>• Straight Pipe RFQs</p>
+            <p>• Bend & Elbow RFQs</p>
+          </div>
+          
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <a 
+              href="/rfqs" 
+              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+            >
+              View Existing RFQs →
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!showForm && submissionResult) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -36,7 +73,7 @@ export default function RfqPage() {
           </div>
           <div className="space-y-3">
             <button
-              onClick={resetForm}
+              onClick={handleGetStarted}
               className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
             >
               Create Another RFQ
@@ -67,7 +104,7 @@ export default function RfqPage() {
           <p className="text-gray-600 mb-6">Your RFQ form has been cancelled. No data was saved.</p>
           <div className="space-y-3">
             <button
-              onClick={resetForm}
+              onClick={handleGetStarted}
               className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
             >
               Start New RFQ
@@ -90,8 +127,9 @@ export default function RfqPage() {
     );
   }
 
+  // Show the RFQ form
   return (
-    <MultiStepStraightPipeRfqForm
+    <UnifiedMultiStepRfqForm
       onSuccess={handleFormSuccess}
       onCancel={handleFormCancel}
     />

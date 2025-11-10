@@ -5,6 +5,7 @@ import { RfqService } from './rfq.service';
 import { Rfq } from './entities/rfq.entity';
 import { RfqItem } from './entities/rfq-item.entity';
 import { StraightPipeRfq } from './entities/straight-pipe-rfq.entity';
+import { BendRfq } from './entities/bend-rfq.entity';
 import { User } from '../user/entities/user.entity';
 import { SteelSpecification } from '../steel-specification/entities/steel-specification.entity';
 import { PipeDimension } from '../pipe-dimension/entities/pipe-dimension.entity';
@@ -21,6 +22,7 @@ import { NbNpsLookup } from '../nb-nps-lookup/entities/nb-nps-lookup.entity';
       Rfq,
       RfqItem,
       StraightPipeRfq,
+      BendRfq,
       User,
       SteelSpecification,
       PipeDimension,

@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Rfq, RfqStatus } from './entities/rfq.entity';
 import { RfqItem, RfqItemType } from './entities/rfq-item.entity';
 import { StraightPipeRfq, LengthUnit, QuantityType, ScheduleType } from './entities/straight-pipe-rfq.entity';
+import { BendRfq } from './entities/bend-rfq.entity';
 import { User } from '../user/entities/user.entity';
 import { SteelSpecification } from '../steel-specification/entities/steel-specification.entity';
 import { PipeDimension } from '../pipe-dimension/entities/pipe-dimension.entity';
@@ -12,7 +13,10 @@ import { FlangeDimension } from '../flange-dimension/entities/flange-dimension.e
 import { BoltMass } from '../bolt-mass/entities/bolt-mass.entity';
 import { NutMass } from '../nut-mass/entities/nut-mass.entity';
 import { CreateStraightPipeRfqWithItemDto } from './dto/create-rfq-item.dto';
+import { CreateBendRfqWithItemDto } from './dto/create-bend-rfq-with-item.dto';
+import { CreateBendRfqDto } from './dto/create-bend-rfq.dto';
 import { StraightPipeCalculationResultDto, RfqResponseDto } from './dto/rfq-response.dto';
+import { BendCalculationResultDto } from './dto/bend-calculation-result.dto';
 
 @Injectable()
 export class RfqService {
@@ -23,6 +27,8 @@ export class RfqService {
     private rfqItemRepository: Repository<RfqItem>,
     @InjectRepository(StraightPipeRfq)
     private straightPipeRfqRepository: Repository<StraightPipeRfq>,
+    @InjectRepository(BendRfq)
+    private bendRfqRepository: Repository<BendRfq>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRepository(SteelSpecification)
@@ -366,5 +372,122 @@ export class RfqService {
     }
 
     return rfq;
+  }
+
+  async calculateBendRequirements(
+    dto: CreateBendRfqDto,
+  ): Promise<BendCalculationResultDto> {
+    // For now, use a comprehensive calculation based on the bend specifications
+    // This would integrate with proper bend tables and pricing in a full implementation
+    
+    const approximateWeight = this.calculateBendWeight(dto);
+    const centerToFace = this.calculateCenterToFace(dto);
+
+    return {
+      totalWeight: approximateWeight,
+      centerToFaceDimension: centerToFace,
+      bendWeight: approximateWeight * 0.7,
+      tangentWeight: approximateWeight * 0.2,
+      flangeWeight: approximateWeight * 0.1,
+      numberOfFlanges: dto.numberOfTangents + 1,
+      numberOfFlangeWelds: dto.numberOfTangents,
+      totalFlangeWeldLength: (dto.numberOfTangents * Math.PI * dto.nominalBoreMm) / 1000,
+      numberOfButtWelds: dto.numberOfTangents > 0 ? 1 : 0,
+      totalButtWeldLength: dto.numberOfTangents > 0 ? (Math.PI * dto.nominalBoreMm) / 1000 : 0,
+      outsideDiameterMm: dto.nominalBoreMm + 20, // Simplified OD calculation
+      wallThicknessMm: this.getWallThicknessFromSchedule(dto.scheduleNumber),
+    };
+  }
+
+  private calculateBendWeight(dto: CreateBendRfqDto): number {
+    // Simplified weight calculation based on nominal bore and bend specifications
+    const baseWeight = Math.pow(dto.nominalBoreMm / 25, 2) * 2; // Base bend weight
+    const tangentWeight = dto.tangentLengths.reduce((total, length) => {
+      return total + (length / 1000) * (dto.nominalBoreMm / 25) * 7.85; // Steel density approximation
+    }, 0);
+    return baseWeight + tangentWeight;
+  }
+
+  private calculateCenterToFace(dto: CreateBendRfqDto): number {
+    // Simplified center-to-face calculation
+    // This should use proper bend tables in production
+    const radius = this.getBendRadius(dto.bendType, dto.nominalBoreMm);
+    return radius * Math.sin(dto.bendDegrees * Math.PI / 180 / 2);
+  }
+
+  private getBendRadius(bendType: string, nominalBoreMm: number): number {
+    const multiplier = parseFloat(bendType.replace('D', ''));
+    return nominalBoreMm * multiplier;
+  }
+
+  private getWallThicknessFromSchedule(scheduleNumber: string): number {
+    // Simplified wall thickness lookup
+    const scheduleMap: { [key: string]: number } = {
+      'Sch10': 2.77,
+      'Sch20': 3.91,
+      'Sch30': 5.54,
+      'Sch40': 6.35,
+      'Sch80': 8.74,
+      'Sch160': 14.27,
+    };
+    return scheduleMap[scheduleNumber] || 6.35; // Default to Sch40
+  }
+
+  async createBendRfq(
+    dto: CreateBendRfqWithItemDto,
+    userId: number,
+  ): Promise<{ rfq: Rfq; calculation: BendCalculationResultDto }> {
+    // Find user (optional - for when authentication is implemented)
+    const user = await this.userRepository.findOne({ where: { id: userId } }).catch(() => null);
+
+    // Calculate bend requirements first
+    const calculation = await this.calculateBendRequirements(dto.bend);
+
+    // Generate RFQ number
+    const rfqCount = await this.rfqRepository.count();
+    const rfqNumber = `RFQ-${new Date().getFullYear()}-${String(rfqCount + 1).padStart(4, '0')}`;
+
+    // Create RFQ
+    const rfq = this.rfqRepository.create({
+      ...dto.rfq,
+      rfqNumber,
+      status: dto.rfq.status || RfqStatus.DRAFT,
+      totalWeightKg: calculation.totalWeight,
+      totalCost: 0, // Cost calculations removed
+      ...(user && { createdBy: user }),
+    });
+
+    const savedRfq: Rfq = await this.rfqRepository.save(rfq);
+
+    // Create RFQ Item
+    const rfqItem = this.rfqItemRepository.create({
+      lineNumber: 1,
+      description: dto.itemDescription,
+      itemType: RfqItemType.BEND,
+      quantity: dto.bend.quantityValue,
+      weightPerUnitKg: calculation.totalWeight / dto.bend.quantityValue,
+      totalWeightKg: calculation.totalWeight,
+      totalPrice: 0, // Cost calculations removed
+      notes: dto.itemNotes,
+      rfq: savedRfq,
+    });
+
+    const savedRfqItem: RfqItem = await this.rfqItemRepository.save(rfqItem);
+
+    // Create Bend RFQ details
+    const bendRfq = this.bendRfqRepository.create({
+      ...dto.bend,
+      rfqItem: savedRfqItem,
+      totalWeightKg: calculation.totalWeight,
+      centerToFaceMm: calculation.centerToFaceDimension,
+      totalCost: 0, // Cost calculations removed
+    });
+
+    await this.bendRfqRepository.save(bendRfq);
+
+    return {
+      rfq: savedRfq,
+      calculation,
+    };
   }
 }

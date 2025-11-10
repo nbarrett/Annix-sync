@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import MultiStepStraightPipeRfqForm from '@/app/components/rfq/MultiStepStraightPipeRfqForm';
+import UnifiedMultiStepRfqForm from '@/app/components/rfq/UnifiedMultiStepRfqForm';
 
 export default function RfqPage() {
   const [showForm, setShowForm] = useState(true);
@@ -79,7 +79,7 @@ export default function RfqPage() {
   }
 
   return (
-    <MultiStepStraightPipeRfqForm
+    <UnifiedMultiStepRfqForm
       onSuccess={handleFormSuccess}
       onCancel={handleFormCancel}
     />

@@ -28,6 +28,7 @@ export interface GlobalSpecs {
 
 export interface RfqFormData {
   projectName: string;
+  projectType?: string;
   description: string;
   customerName: string;
   customerEmail: string;
@@ -56,6 +57,7 @@ export const useRfqForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [rfqData, setRfqData] = useState<RfqFormData>({
     projectName: '500NB Pipeline Extension Project',
+    projectType: undefined, // Will be set by user selection
     description: 'Extension of existing pipeline system with carbon steel pipe',
     customerName: 'Acme Industrial Solutions',
     customerEmail: 'procurement@acme-industrial.co.za',

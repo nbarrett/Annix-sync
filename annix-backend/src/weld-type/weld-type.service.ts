@@ -13,13 +13,15 @@ export class WeldTypeService {
   ) {}
 
   async create(dto: CreateWeldTypeDto): Promise<WeldType> {
-    const exists = await this.weldTypeRepo.findOne({ where: { code: dto.code } });
+    const exists = await this.weldTypeRepo.findOne({ where: { weld_code: dto.weld_code } });
     if (exists) {
-      throw new BadRequestException(`WeldType with code "${dto.code}" already exists`);
+      throw new BadRequestException(`WeldType with code "${dto.weld_code}" already exists`);
     }
 
     const weldType = this.weldTypeRepo.create({
-      code: dto.code,
+      weld_code: dto.weld_code,
+      weld_name: dto.weld_name,
+      category: dto.category,
       description: dto.description,
     });
     return this.weldTypeRepo.save(weldType);
@@ -32,6 +34,12 @@ export class WeldTypeService {
   async findOne(id: number): Promise<WeldType> {
     const weldType = await this.weldTypeRepo.findOne({ where: { id } });
     if (!weldType) throw new NotFoundException(`WeldType ${id} not found`);
+    return weldType;
+  }
+
+  async findByCode(weld_code: string): Promise<WeldType> {
+    const weldType = await this.weldTypeRepo.findOne({ where: { weld_code } });
+    if (!weldType) throw new NotFoundException(`WeldType with code "${weld_code}" not found`);
     return weldType;
   }
 

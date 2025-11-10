@@ -1,0 +1,1018 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { 
+  generateClientItemNumber, 
+  generateSystemReferenceNumber 
+} from '@/app/lib/utils/systemUtils';
+import { masterDataApi, bendRfqApi } from '@/app/lib/api/client';
+
+// Types
+interface BendEntry {
+  id: string;
+  description?: string;
+  clientItemNumber?: string;
+  specs: {
+    nominalBoreMm?: number;
+    scheduleNumber?: string;
+    wallThicknessMm?: number;
+    bendType?: string; // '1.5D', '2D', '3D', '5D'
+    bendDegrees?: number; // 45, 90, etc.
+    numberOfTangents?: number;
+    tangentLengths?: number[]; // Array for multiple tangents
+    steelSpecificationId?: number;
+    flangeStandardId?: number;
+    flangePressureClassId?: number;
+    quantityValue: number;
+    quantityType: 'number_of_items';
+    workingPressureBar?: number;
+    workingTemperatureC?: number;
+    useGlobalFlangeSpecs?: boolean;
+  };
+  calculation?: any;
+}
+
+interface BendRfqFormData {
+  projectName: string;
+  description: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  requiredDate: string;
+  notes: string;
+  globalSpecs: {
+    workingPressureBar?: number;
+    workingTemperatureC?: number;
+    steelSpecificationId?: number;
+    flangeStandardId?: number;
+    flangePressureClassId?: number;
+  };
+  bendEntries: BendEntry[];
+}
+
+interface Props {
+  onSuccess: (rfqId: string) => void;
+  onCancel: () => void;
+}
+
+const nominalBores = [40, 50]; // Only these sizes have bend data in the database
+const bendTypes = ['1.5D', '2D', '3D', '5D'];
+const standardAngles = [15, 22.5, 30, 45, 60, 90];
+
+export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [masterData, setMasterData] = useState<any>({
+    steelSpecs: [],
+    flangeStandards: [],
+    pressureClasses: [],
+  });
+
+  const [formData, setFormData] = useState<BendRfqFormData>({
+    projectName: 'Bend Pipeline Project',
+    description: 'Pipeline bends and elbows for system installation',
+    customerName: 'Acme Industrial Solutions',
+    customerEmail: 'procurement@acme-industrial.co.za',
+    customerPhone: '+27 11 555 0123',
+    requiredDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    notes: 'All bends to be fabricated according to ASME B16.49',
+    globalSpecs: {
+      workingPressureBar: 16,
+      workingTemperatureC: 120,
+      steelSpecificationId: 2,
+    },
+    bendEntries: [],
+  });
+
+  // Load master data
+  useEffect(() => {
+    const loadMasterData = async () => {
+      try {
+        // You'll need to implement these API calls or use existing ones
+        setMasterData({
+          steelSpecs: [
+            { id: 1, steelSpecName: 'ASTM A106 Grade A' },
+            { id: 2, steelSpecName: 'ASTM A106 Grade B' },
+            { id: 3, steelSpecName: 'ASTM A53 Grade B' },
+          ],
+          flangeStandards: [
+            { id: 1, code: 'ASME B16.5' },
+            { id: 2, code: 'EN 1092-1' },
+          ],
+          pressureClasses: [
+            { id: 1, designation: 'Class 150' },
+            { id: 2, designation: 'Class 300' },
+            { id: 3, designation: 'Class 600' },
+          ],
+        });
+      } catch (error) {
+        console.error('Failed to load master data:', error);
+      }
+    };
+
+    loadMasterData();
+  }, []);
+
+  const updateField = (field: keyof BendRfqFormData, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value,
+    }));
+    
+    // Clear error for this field
+    if (errors[field]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
+  };
+
+  const addBendEntry = () => {
+    const newEntry: BendEntry = {
+      id: Date.now().toString(),
+      description: '40NB 90° Bend',
+      clientItemNumber: generateClientItemNumber(formData.customerName, formData.bendEntries.length + 1),
+      specs: {
+        nominalBoreMm: 40,
+        scheduleNumber: '40',
+        bendType: '1.5D',
+        bendDegrees: 90,
+        numberOfTangents: 2,
+        tangentLengths: [150, 150],
+        quantityValue: 1,
+        quantityType: 'number_of_items',
+        workingPressureBar: formData.globalSpecs.workingPressureBar,
+        workingTemperatureC: formData.globalSpecs.workingTemperatureC,
+        steelSpecificationId: formData.globalSpecs.steelSpecificationId,
+        useGlobalFlangeSpecs: true,
+      },
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      bendEntries: [...prev.bendEntries, newEntry],
+    }));
+
+    return newEntry.id;
+  };
+
+  const updateBendEntry = (id: string, updates: Partial<BendEntry>) => {
+    setFormData(prev => ({
+      ...prev,
+      bendEntries: prev.bendEntries.map(entry =>
+        entry.id === id ? { ...entry, ...updates } : entry
+      ),
+    }));
+  };
+
+  const removeBendEntry = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      bendEntries: prev.bendEntries.filter(entry => entry.id !== id),
+    }));
+  };
+
+  const calculateBend = async (entryId: string) => {
+    setLoading(true);
+    try {
+      const entry = formData.bendEntries.find(e => e.id === entryId);
+      if (!entry) return;
+
+      const calculationData = {
+        nominalBoreMm: entry.specs.nominalBoreMm || 100,
+        scheduleNumber: entry.specs.scheduleNumber || '40',
+        bendDegrees: entry.specs.bendDegrees || 90,
+        bendType: entry.specs.bendType || '1.5D',
+        quantityValue: entry.specs.quantityValue || 1,
+        quantityType: 'number_of_items' as const,
+        numberOfTangents: entry.specs.numberOfTangents || 1,
+        tangentLengths: entry.specs.tangentLengths || [400],
+        workingPressureBar: entry.specs.workingPressureBar || 10,
+        workingTemperatureC: entry.specs.workingTemperatureC || 20,
+        steelSpecificationId: entry.specs.steelSpecificationId || 2,
+        useGlobalFlangeSpecs: true,
+      };
+
+      const result = await bendRfqApi.calculate(calculationData);
+
+      updateBendEntry(entryId, {
+        calculation: result,
+      });
+
+    } catch (error) {
+      console.error('Bend calculation failed:', error);
+      alert('Bend calculation failed. Please check your specifications.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const validateCurrentStep = () => {
+    let stepErrors: Record<string, string> = {};
+    
+    switch (currentStep) {
+      case 1:
+        if (!formData.projectName.trim()) {
+          stepErrors.projectName = 'Project name is required';
+        }
+        if (!formData.customerName.trim()) {
+          stepErrors.customerName = 'Customer name is required';
+        }
+        if (!formData.customerEmail.trim()) {
+          stepErrors.customerEmail = 'Customer email is required';
+        }
+        break;
+      case 2:
+        // Global specs validation (optional for bends)
+        break;
+      case 3:
+        if (formData.bendEntries.length === 0) {
+          stepErrors.bendEntries = 'Please add at least one bend item';
+        }
+        break;
+    }
+
+    setErrors(stepErrors);
+    return Object.keys(stepErrors).length === 0;
+  };
+
+  const nextStep = () => {
+    if (validateCurrentStep()) {
+      setCurrentStep(prev => Math.min(prev + 1, 4));
+    }
+  };
+
+  const prevStep = () => {
+    setCurrentStep(prev => Math.max(prev - 1, 1));
+    setErrors({});
+  };
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      const { bendRfqApi } = await import('@/app/lib/api/client');
+      
+      // Transform form data to API format
+      const firstBendEntry = formData.bendEntries[0];
+      if (!firstBendEntry) {
+        throw new Error('No bend entries found');
+      }
+
+      const rfqData = {
+        rfq: {
+          projectName: formData.projectName,
+          description: formData.description,
+          customerName: formData.customerName,
+          customerEmail: formData.customerEmail,
+          customerPhone: formData.customerPhone,
+          requiredDate: formData.requiredDate,
+          status: 'draft' as const,
+          notes: formData.notes,
+        },
+        bend: {
+          nominalBoreMm: firstBendEntry.specs.nominalBoreMm || 40,
+          scheduleNumber: firstBendEntry.specs.scheduleNumber || 'Sch40',
+          bendType: firstBendEntry.specs.bendType || '1.5D',
+          bendDegrees: firstBendEntry.specs.bendDegrees || 90,
+          numberOfTangents: firstBendEntry.specs.numberOfTangents || 0,
+          tangentLengths: firstBendEntry.specs.tangentLengths || [],
+          quantityValue: firstBendEntry.specs.quantityValue || 1,
+          quantityType: 'number_of_items' as const,
+          workingPressureBar: firstBendEntry.specs.workingPressureBar || formData.globalSpecs.workingPressureBar || 10,
+          workingTemperatureC: firstBendEntry.specs.workingTemperatureC || formData.globalSpecs.workingTemperatureC || 20,
+          steelSpecificationId: firstBendEntry.specs.steelSpecificationId || formData.globalSpecs.steelSpecificationId || 2,
+          useGlobalFlangeSpecs: firstBendEntry.specs.useGlobalFlangeSpecs ?? true,
+          ...(firstBendEntry.specs.flangeStandardId && { flangeStandardId: firstBendEntry.specs.flangeStandardId }),
+          ...(firstBendEntry.specs.flangePressureClassId && { flangePressureClassId: firstBendEntry.specs.flangePressureClassId }),
+        },
+        itemDescription: firstBendEntry.description || 'Bend RFQ Item',
+        itemNotes: undefined, // BendEntry doesn't have notes field
+      };
+
+      const response = await bendRfqApi.create(rfqData);
+      onSuccess(response.rfq.rfqNumber);
+      
+    } catch (error) {
+      console.error('Submission failed:', error);
+      alert('Failed to submit bend RFQ. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const steps = [
+    { number: 1, title: 'Project Details', completed: currentStep > 1 },
+    { number: 2, title: 'Global Specs', completed: currentStep > 2 },
+    { number: 3, title: 'Bend Items', completed: currentStep > 3 },
+    { number: 4, title: 'Review & Submit', completed: false },
+  ];
+
+  return (
+    <div className="max-w-6xl mx-auto p-6">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Bend RFQ</h1>
+        <p className="text-gray-600">Create an RFQ for pipeline bends and elbows</p>
+      </div>
+
+      {/* Progress Steps */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          {steps.map((step, index) => (
+            <div key={step.number} className="flex items-center">
+              {/* Step Circle */}
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                  currentStep === step.number
+                    ? 'bg-blue-500 text-white'
+                    : step.completed
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-300 text-gray-600'
+                }`}
+              >
+                {step.completed ? (
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  step.number
+                )}
+              </div>
+
+              {/* Step Title */}
+              <div className="ml-3 text-sm font-medium text-gray-900">
+                {step.title}
+              </div>
+
+              {/* Connector Line */}
+              {index < steps.length - 1 && (
+                <div
+                  className={`mx-4 h-px w-16 ${
+                    step.completed ? 'bg-green-500' : 'bg-gray-300'
+                  }`}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Form Content */}
+      <div className="bg-white rounded-lg border border-gray-300 p-8 min-h-[600px]">
+        {/* Step 1: Project Details */}
+        {currentStep === 1 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Project Details</h2>
+              <p className="text-gray-600 mb-6">
+                Provide basic information about your bend RFQ project.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Project Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.projectName}
+                  onChange={(e) => updateField('projectName', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 ${
+                    errors.projectName ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="e.g., Pipeline Bend Fabrication"
+                />
+                {errors.projectName && (
+                  <p className="mt-1 text-sm text-red-600">{errors.projectName}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Customer Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.customerName}
+                  onChange={(e) => updateField('customerName', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 ${
+                    errors.customerName ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="e.g., Acme Industrial Solutions"
+                />
+                {errors.customerName && (
+                  <p className="mt-1 text-sm text-red-600">{errors.customerName}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Customer Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={formData.customerEmail}
+                  onChange={(e) => updateField('customerEmail', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 ${
+                    errors.customerEmail ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="procurement@company.com"
+                />
+                {errors.customerEmail && (
+                  <p className="mt-1 text-sm text-red-600">{errors.customerEmail}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Customer Phone
+                </label>
+                <input
+                  type="tel"
+                  value={formData.customerPhone}
+                  onChange={(e) => updateField('customerPhone', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="+27 11 555 0123"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Project Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => updateField('description', e.target.value)}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                placeholder="Describe the bend requirements, location, special specifications..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Required Delivery Date
+              </label>
+              <input
+                type="date"
+                value={formData.requiredDate}
+                onChange={(e) => updateField('requiredDate', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Additional Notes
+              </label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => updateField('notes', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                placeholder="Any special requirements, fabrication standards, testing requirements..."
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Global Specifications */}
+        {currentStep === 2 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Global Specifications</h2>
+              <p className="text-gray-600 mb-6">
+                Set default specifications that will apply to all bend items.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Working Pressure (bar)
+                </label>
+                <input
+                  type="number"
+                  value={formData.globalSpecs.workingPressureBar || ''}
+                  onChange={(e) => updateField('globalSpecs', {
+                    ...formData.globalSpecs,
+                    workingPressureBar: parseFloat(e.target.value) || 0
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="e.g., 16"
+                  min="0"
+                  step="0.1"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Working Temperature (°C)
+                </label>
+                <input
+                  type="number"
+                  value={formData.globalSpecs.workingTemperatureC || ''}
+                  onChange={(e) => updateField('globalSpecs', {
+                    ...formData.globalSpecs,
+                    workingTemperatureC: parseFloat(e.target.value) || 20
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="e.g., 120"
+                  step="1"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Steel Specification
+                </label>
+                <select
+                  value={formData.globalSpecs.steelSpecificationId || ''}
+                  onChange={(e) => updateField('globalSpecs', {
+                    ...formData.globalSpecs,
+                    steelSpecificationId: parseInt(e.target.value) || undefined
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                >
+                  <option value="">Select steel specification</option>
+                  {masterData.steelSpecs?.map((spec: any) => (
+                    <option key={spec.id} value={spec.id}>
+                      {spec.steelSpecName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Flange Standard
+                </label>
+                <select
+                  value={formData.globalSpecs.flangeStandardId || ''}
+                  onChange={(e) => updateField('globalSpecs', {
+                    ...formData.globalSpecs,
+                    flangeStandardId: parseInt(e.target.value) || undefined
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                >
+                  <option value="">Select flange standard</option>
+                  {masterData.flangeStandards?.map((standard: any) => (
+                    <option key={standard.id} value={standard.id}>
+                      {standard.code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Bend Items */}
+        {currentStep === 3 && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Bend Items</h2>
+                <p className="text-gray-600 mt-2">
+                  Add the specific bend items you need for your project.
+                </p>
+              </div>
+              <button
+                onClick={addBendEntry}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Add Bend Item
+              </button>
+            </div>
+
+            {errors.bendEntries && (
+              <p className="text-red-600 text-sm">{errors.bendEntries}</p>
+            )}
+
+            <div className="space-y-4">
+              {formData.bendEntries.map((entry, index) => (
+                <div key={entry.id} className="border border-gray-300 rounded-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Bend Item {index + 1}
+                    </h3>
+                    <button
+                      onClick={() => removeBendEntry(entry.id)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nominal Bore (mm)
+                      </label>
+                      <select
+                        value={entry.specs.nominalBoreMm || ''}
+                        onChange={(e) => updateBendEntry(entry.id, {
+                          specs: {
+                            ...entry.specs,
+                            nominalBoreMm: parseInt(e.target.value) || undefined
+                          }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      >
+                        <option value="">Select NB</option>
+                        {nominalBores.map(nb => (
+                          <option key={nb} value={nb}>{nb}NB</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Schedule
+                      </label>
+                      <select
+                        value={entry.specs.scheduleNumber || ''}
+                        onChange={(e) => updateBendEntry(entry.id, {
+                          specs: {
+                            ...entry.specs,
+                            scheduleNumber: e.target.value
+                          }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      >
+                        <option value="">Select Schedule</option>
+                        <option value="10">Sch 10</option>
+                        <option value="40">Sch 40</option>
+                        <option value="80">Sch 80</option>
+                        <option value="160">Sch 160</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Bend Type
+                      </label>
+                      <select
+                        value={entry.specs.bendType || ''}
+                        onChange={(e) => updateBendEntry(entry.id, {
+                          specs: {
+                            ...entry.specs,
+                            bendType: e.target.value
+                          }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      >
+                        <option value="">Select Bend Type</option>
+                        {bendTypes.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Bend Angle (degrees)
+                      </label>
+                      <select
+                        value={entry.specs.bendDegrees || ''}
+                        onChange={(e) => updateBendEntry(entry.id, {
+                          specs: {
+                            ...entry.specs,
+                            bendDegrees: parseInt(e.target.value) || undefined
+                          }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      >
+                        <option value="">Select Angle</option>
+                        {standardAngles.map(angle => (
+                          <option key={angle} value={angle}>{angle}°</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Quantity
+                      </label>
+                      <input
+                        type="number"
+                        value={entry.specs.quantityValue || ''}
+                        onChange={(e) => updateBendEntry(entry.id, {
+                          specs: {
+                            ...entry.specs,
+                            quantityValue: parseInt(e.target.value) || 1
+                          }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        min="1"
+                        placeholder="1"
+                      />
+                    </div>
+
+                    <div className="flex items-end">
+                      <button
+                        onClick={() => calculateBend(entry.id)}
+                        disabled={loading}
+                        className="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                      >
+                        {loading ? 'Calculating...' : 'Calculate'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {entry.calculation && (
+                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                      <h4 className="font-medium text-gray-900 mb-3">Calculation Results:</h4>
+                      
+                      {/* Main metrics */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500">
+                          <div className="text-xs text-gray-500 uppercase tracking-wide font-medium">Total Weight</div>
+                          <div className="text-2xl font-bold text-gray-900 mt-1">{entry.calculation.totalWeight?.toFixed(1)} kg</div>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
+                          <div className="text-xs text-gray-500 uppercase tracking-wide font-medium">Center-to-Face</div>
+                          <div className="text-2xl font-bold text-gray-900 mt-1">{entry.calculation.centerToFaceDimension?.toFixed(1)} mm</div>
+                        </div>
+                      </div>
+
+                      {/* Weight breakdown */}
+                      <div className="bg-white p-4 rounded-lg shadow-sm mb-4">
+                        <h5 className="text-sm font-medium text-gray-700 mb-3">Weight Breakdown:</h5>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                            <span className="text-sm text-gray-600">Bend:</span>
+                            <span className="font-medium text-gray-900">{entry.calculation.bendWeight?.toFixed(1) || '0'} kg</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                            <span className="text-sm text-gray-600">Tangent:</span>
+                            <span className="font-medium text-gray-900">{entry.calculation.tangentWeight?.toFixed(1) || '0'} kg</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                            <span className="text-sm text-gray-600">Flange:</span>
+                            <span className="font-medium text-gray-900">{entry.calculation.flangeWeight?.toFixed(1) || '0'} kg</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Technical details */}
+                      <div className="bg-white p-4 rounded-lg shadow-sm">
+                        <h5 className="text-sm font-medium text-gray-700 mb-3">Technical Details:</h5>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="flex flex-col">
+                            <span className="text-xs text-gray-500 uppercase tracking-wide">Outside Diameter</span>
+                            <span className="font-medium text-gray-900">{entry.calculation.outsideDiameterMm?.toFixed(1) || '0'} mm</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs text-gray-500 uppercase tracking-wide">Wall Thickness</span>
+                            <span className="font-medium text-gray-900">{entry.calculation.wallThicknessMm?.toFixed(2) || '0'} mm</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs text-gray-500 uppercase tracking-wide">Flanges</span>
+                            <span className="font-medium text-gray-900">{entry.calculation.numberOfFlanges || 0}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs text-gray-500 uppercase tracking-wide">Weld Length</span>
+                            <span className="font-medium text-gray-900">{((entry.calculation.totalFlangeWeldLength || 0) + (entry.calculation.totalButtWeldLength || 0)).toFixed(2)} m</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {formData.bendEntries.length === 0 && (
+                <div className="text-center py-12 text-gray-500">
+                  <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <p>No bend items added yet.</p>
+                  <p className="text-sm">Click "Add Bend Item" to get started.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Review & Submit */}
+        {currentStep === 4 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Review & Submit</h2>
+              <p className="text-gray-600 mb-6">
+                Please review your bend RFQ details before submitting.
+              </p>
+            </div>
+
+            {/* Project Summary */}
+            <div className="bg-gray-50 border border-gray-300 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Project Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Project Name</p>
+                  <p className="font-medium text-gray-900">{formData.projectName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Customer</p>
+                  <p className="font-medium text-gray-900">{formData.customerName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Contact Email</p>
+                  <p className="font-medium text-gray-900">{formData.customerEmail}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Required Date</p>
+                  <p className="font-medium text-gray-900">{formData.requiredDate || 'Not specified'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bend Items Summary */}
+            <div className="bg-gray-50 border border-gray-300 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Bend Items Summary</h3>
+              <div className="space-y-4">
+                {formData.bendEntries.map((entry, index) => (
+                  <div key={entry.id} className="p-4 bg-white rounded-lg border shadow-sm">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-900 text-lg">
+                          {entry.specs.nominalBoreMm}NB {entry.specs.bendDegrees}° {entry.specs.bendType} Bend
+                        </h4>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {entry.description}
+                        </p>
+                        <div className="mt-2">
+                          <span className="text-sm text-gray-600">Total Weight: </span>
+                          <span className="font-medium text-gray-900">{entry.calculation?.totalWeight?.toFixed(1) || '0'} kg</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Item specifications */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3 p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <span className="text-xs text-gray-500 uppercase tracking-wide">Quantity</span>
+                        <p className="font-medium text-gray-900">{entry.specs.quantityValue}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 uppercase tracking-wide">Schedule</span>
+                        <p className="font-medium text-gray-900">{entry.specs.scheduleNumber}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 uppercase tracking-wide">Tangents</span>
+                        <p className="font-medium text-gray-900">{entry.specs.numberOfTangents}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 uppercase tracking-wide">Pressure</span>
+                        <p className="font-medium text-gray-900">{entry.specs.workingPressureBar} bar</p>
+                      </div>
+                    </div>
+
+                    {/* Calculation results if available */}
+                    {entry.calculation && (
+                      <div className="border-t pt-3">
+                        <h5 className="text-sm font-medium text-gray-900 mb-2">Calculation Summary:</h5>
+                        
+                        {/* Key metrics */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+                          <div className="text-center p-2 bg-blue-50 rounded">
+                            <div className="text-lg font-bold text-blue-600">{entry.calculation.totalWeight?.toFixed(1)} kg</div>
+                            <div className="text-xs text-gray-600">Total Weight</div>
+                          </div>
+                          <div className="text-center p-2 bg-green-50 rounded">
+                            <div className="text-lg font-bold text-green-600">{entry.calculation.centerToFaceDimension?.toFixed(1)} mm</div>
+                            <div className="text-xs text-gray-600">Center-to-Face</div>
+                          </div>
+                          <div className="text-center p-2 bg-purple-50 rounded">
+                            <div className="text-lg font-bold text-purple-600">{entry.calculation.numberOfFlanges || 0}</div>
+                            <div className="text-xs text-gray-600">Flanges</div>
+                          </div>
+                        </div>
+
+                        {/* Weight breakdown */}
+                        <div className="grid grid-cols-3 gap-4 mb-3 text-sm">
+                          <div>
+                            <span className="text-gray-600">Bend:</span>
+                            <span className="ml-2 font-medium text-gray-900">{entry.calculation.bendWeight?.toFixed(1) || '0'} kg</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Tangents:</span>
+                            <span className="ml-2 font-medium text-gray-900">{entry.calculation.tangentWeight?.toFixed(1) || '0'} kg</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Flanges:</span>
+                            <span className="ml-2 font-medium text-gray-900">{entry.calculation.flangeWeight?.toFixed(1) || '0'} kg</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Show if no calculation yet */}
+                    {!entry.calculation && (
+                      <div className="border-t pt-3">
+                        <p className="text-sm text-yellow-600 bg-yellow-50 p-2 rounded">
+                          ⚠️ Calculation not performed yet. Go back to step 3 to calculate this bend.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                
+                {formData.bendEntries.length === 0 && (
+                  <p className="text-gray-500 text-center py-4">No bend items added</p>
+                )}
+              </div>
+            </div>
+
+            {/* Project Totals */}
+            {formData.bendEntries.length > 0 && (
+              <div className="bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Project Totals</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {formData.bendEntries.reduce((total, entry) => 
+                        total + (entry.calculation?.totalWeight || 0), 0).toFixed(1)} kg
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">Total Weight</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {formData.bendEntries.length}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">Total Items</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {Math.max(...formData.bendEntries.map(entry => entry.calculation?.leadTimeDays || 0), 0)} days
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">Max Lead Time</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            {formData.notes && (
+              <div className="bg-gray-50 border border-gray-300 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Notes</h3>
+                <p className="text-gray-700 whitespace-pre-wrap">{formData.notes}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <div className="flex justify-between mt-8">
+        <div>
+          {currentStep > 1 && (
+            <button
+              onClick={prevStep}
+              disabled={loading}
+              className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              Previous
+            </button>
+          )}
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          
+          {currentStep < 4 ? (
+            <button
+              onClick={nextStep}
+              disabled={loading}
+              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              Next
+            </button>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+            >
+              {loading ? 'Submitting...' : 'Submit Bend RFQ'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

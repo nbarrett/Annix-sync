@@ -14,7 +14,10 @@ import {
 } from '@nestjs/swagger';
 import { RfqService } from './rfq.service';
 import { CreateStraightPipeRfqWithItemDto } from './dto/create-rfq-item.dto';
+import { CreateBendRfqWithItemDto } from './dto/create-bend-rfq-with-item.dto';
+import { CreateBendRfqDto } from './dto/create-bend-rfq.dto';
 import { StraightPipeCalculationResultDto, RfqResponseDto } from './dto/rfq-response.dto';
+import { BendCalculationResultDto } from './dto/bend-calculation-result.dto';
 import { Rfq } from './entities/rfq.entity';
 
 @ApiTags('RFQ')
@@ -196,6 +199,103 @@ export class RfqController {
     // For demo purposes, use a default user ID (1) when auth is disabled
     const userId = 1;
     return this.rfqService.createStraightPipeRfq(dto, userId);
+  }
+
+  @Post('bend/calculate')
+  @ApiOperation({
+    summary: 'Calculate bend requirements',
+    description: 'Calculate bend weight, center-to-face dimensions, welding requirements, and pricing for bend RFQ',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Bend calculation completed successfully',
+    type: BendCalculationResultDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Bend data, pipe dimension, or steel specification not found',
+  })
+  @ApiBody({
+    description: 'Bend specifications for calculation',
+    type: CreateBendRfqDto,
+  })
+  async calculateBendRequirements(
+    @Body() dto: CreateBendRfqDto,
+  ): Promise<BendCalculationResultDto> {
+    return this.rfqService.calculateBendRequirements(dto);
+  }
+
+  @Post('bend')
+  @ApiOperation({
+    summary: 'Create bend RFQ',
+    description: 'Create a new RFQ for bends/elbows with automatic calculations including center-to-face, weights, and welding requirements',
+  })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'Bend RFQ created successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        rfq: {
+          $ref: '#/components/schemas/Rfq',
+        },
+        calculation: {
+          $ref: '#/components/schemas/BendCalculationResultDto',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid input data',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'User, bend data, pipe dimension, or steel specification not found',
+  })
+  @ApiBody({
+    description: 'Complete bend RFQ data',
+    type: CreateBendRfqWithItemDto,
+    examples: {
+      example1: {
+        summary: 'Example bend RFQ - 350NB 3D 45° with tangent',
+        value: {
+          rfq: {
+            projectName: '350NB Pipeline Bend Extension',
+            description: 'Bend for pipeline direction change',
+            customerName: 'Industrial Solutions Ltd',
+            customerEmail: 'procurement@industrial.co.za',
+            customerPhone: '+27 11 555 0456',
+            requiredDate: '2025-12-15',
+            status: 'draft',
+            notes: 'Special coating requirements',
+          },
+          bend: {
+            nominalBoreMm: 350,
+            scheduleNumber: 'Sch30',
+            bendType: '3D',
+            bendDegrees: 45,
+            numberOfTangents: 1,
+            tangentLengths: [400],
+            quantityValue: 1,
+            quantityType: 'number_of_items',
+            workingPressureBar: 16,
+            workingTemperatureC: 20,
+            steelSpecificationId: 2,
+            useGlobalFlangeSpecs: true,
+          },
+          itemDescription: '350NB 3D 45° Pulled Bend, Sch30 with 1 tangent of 400mm for 16 Bar Line',
+          itemNotes: 'Requires special surface treatment and inspection',
+        },
+      },
+    },
+  })
+  async createBendRfq(
+    @Body() dto: CreateBendRfqWithItemDto,
+  ): Promise<{ rfq: Rfq; calculation: BendCalculationResultDto }> {
+    // For demo purposes, use a default user ID (1) when auth is disabled
+    const userId = 1;
+    return this.rfqService.createBendRfq(dto, userId);
   }
 
   @Get()

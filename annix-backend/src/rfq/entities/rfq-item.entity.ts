@@ -1,10 +1,12 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, JoinColumn } from 'typeorm';
 import { Rfq } from './rfq.entity';
 import { StraightPipeRfq } from './straight-pipe-rfq.entity';
+import { BendRfq } from './bend-rfq.entity';
 import { ApiProperty } from '@nestjs/swagger';
 
 export enum RfqItemType {
   STRAIGHT_PIPE = 'straight_pipe',
+  BEND = 'bend',
   FITTING = 'fitting',
   FLANGE = 'flange',
   CUSTOM = 'custom',
@@ -60,4 +62,8 @@ export class RfqItem {
   @ApiProperty({ description: 'Straight pipe details (if item type is straight_pipe)', required: false, type: () => StraightPipeRfq })
   @OneToOne(() => StraightPipeRfq, (straightPipe) => straightPipe.rfqItem, { cascade: true, nullable: true })
   straightPipeDetails?: StraightPipeRfq;
+
+  @ApiProperty({ description: 'Bend details (if item type is bend)', required: false, type: () => BendRfq })
+  @OneToOne(() => BendRfq, (bend) => bend.rfqItem, { cascade: true, nullable: true })
+  bendDetails?: BendRfq;
 }
