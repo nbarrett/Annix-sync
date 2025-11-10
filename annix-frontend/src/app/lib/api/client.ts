@@ -29,9 +29,46 @@ export interface CreateStraightPipeRfqDto {
   flangePressureClassId?: number;
 }
 
+export interface PipeEndConfiguration {
+  id: number;
+  configCode: string;
+  configName: string;
+  description: string;
+  weldCount: number;
+}
+
+export interface WeldType {
+  id: number;
+  weldCode: string;
+  weldName: string;
+  category: string;
+  description: string;
+}
+
 export interface CreateStraightPipeRfqWithItemDto {
   rfq: CreateRfqDto;
   straightPipe: CreateStraightPipeRfqDto;
+  itemDescription: string;
+  itemNotes?: string;
+}
+
+export interface CreateBendRfqDto {
+  nominalBoreMm: number;
+  scheduleNumber: string;
+  bendType: string;
+  bendDegrees: number;
+  numberOfTangents: number;
+  tangentLengths: number[];
+  quantityValue: number;
+  quantityType: 'number_of_items';
+  workingPressureBar: number;
+  workingTemperatureC: number;
+  steelSpecificationId: number;
+}
+
+export interface CreateBendRfqWithItemDto {
+  rfq: CreateRfqDto;
+  bend: CreateBendRfqDto;
   itemDescription: string;
   itemNotes?: string;
 }
@@ -52,6 +89,21 @@ export interface StraightPipeCalculationResult {
   totalButtWeldLength: number;
   numberOfFlangeWelds: number;
   totalFlangeWeldLength: number;
+}
+
+export interface BendCalculationResult {
+  totalWeight: number;
+  centerToFaceDimension: number;
+  bendWeight: number;
+  tangentWeight: number;
+  flangeWeight: number;
+  numberOfFlanges: number;
+  numberOfFlangeWelds: number;
+  totalFlangeWeldLength: number;
+  numberOfButtWelds: number;
+  totalButtWeldLength: number;
+  outsideDiameterMm: number;
+  wallThicknessMm: number;
 }
 
 export interface RfqResponse {
@@ -230,6 +282,24 @@ class ApiClient {
     });
   }
 
+  async calculateBendRfq(
+    data: CreateBendRfqDto
+  ): Promise<BendCalculationResult> {
+    return this.request('/rfq/bend/calculate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async createBendRfq(
+    data: CreateBendRfqWithItemDto
+  ): Promise<{ rfq: any; calculation: BendCalculationResult }> {
+    return this.request('/rfq/bend', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getRfqs(): Promise<RfqResponse[]> {
     return this.request<RfqResponse[]>('/rfq');
   }
@@ -316,6 +386,63 @@ class ApiClient {
 
     return this.request<PipeDimension[]>(`/pipe-dimensions/higher-schedules?${params}`);
   }
+
+  // Pipe end configuration endpoints
+  async getPipeEndConfigurations(): Promise<PipeEndConfiguration[]> {
+    return this.request<PipeEndConfiguration[]>('/pipe-end-configurations');
+  }
+
+  async getPipeEndConfigurationByCode(configCode: string): Promise<PipeEndConfiguration> {
+    return this.request<PipeEndConfiguration>(`/pipe-end-configurations/${configCode}`);
+  }
+
+  // Bend calculations
+  async calculateBendSpecifications(params: {
+    nominalBoreMm: number;
+    wallThicknessMm: number;
+    scheduleNumber?: string;
+    bendType: string;
+    bendDegrees: number;
+    numberOfTangents?: number;
+    tangentLengths?: number[];
+    quantity?: number;
+    steelSpecificationId?: number;
+    flangeStandardId?: number;
+    flangePressureClassId?: number;
+  }): Promise<{
+    centerToFaceDimension: number;
+    bendRadius: number;
+    totalBendWeight: number;
+    totalTangentWeight: number;
+    totalSystemWeight: number;
+    numberOfFlanges: number;
+    numberOfFlangeWelds: number;
+    numberOfButtWelds: number;
+    totalFlangeWeldLength: number;
+    totalButtWeldLength: number;
+  }> {
+    return this.request('/bend-center-to-face/calculate', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  }
+
+  async getBendTypes(): Promise<string[]> {
+    return this.request<string[]>('/bend-center-to-face/bend-types');
+  }
+
+  async getBendCenterToFace(bendType: string, nominalBoreMm: number, degrees: number): Promise<any> {
+    return this.request(`/bend-center-to-face/lookup?bendType=${bendType}&nominalBoreMm=${nominalBoreMm}&degrees=${degrees}`);
+  }
+
+  // Weld type endpoints
+  async getWeldTypes(): Promise<WeldType[]> {
+    return this.request<WeldType[]>('/weld-type');
+  }
+
+  async getWeldTypeById(id: number): Promise<WeldType> {
+    return this.request<WeldType>(`/weld-type/${id}`);
+  }
 }
 
 // Create and export the API client instance
@@ -331,6 +458,13 @@ export const rfqApi = {
   getById: (id: number) => apiClient.getRfqById(id),
 };
 
+export const bendRfqApi = {
+  calculate: (data: CreateBendRfqDto) => 
+    apiClient.calculateBendRfq(data),
+  create: (data: CreateBendRfqWithItemDto) => 
+    apiClient.createBendRfq(data),
+};
+
 export const masterDataApi = {
   getSteelSpecifications: () => apiClient.getSteelSpecifications(),
   getFlangeStandards: () => apiClient.getFlangeStandards(),
@@ -342,6 +476,16 @@ export const masterDataApi = {
     apiClient.getRecommendedSpecs(nominalBore, workingPressure, temperature, steelSpecId),
   getHigherSchedules: (nominalBore: number, currentWallThickness: number, workingPressure: number, temperature?: number, steelSpecId?: number) =>
     apiClient.getHigherSchedules(nominalBore, currentWallThickness, workingPressure, temperature, steelSpecId),
+  getPipeEndConfigurations: () => apiClient.getPipeEndConfigurations(),
+  getPipeEndConfigurationByCode: (configCode: string) => apiClient.getPipeEndConfigurationByCode(configCode),
+
+  // Bend calculations  
+  calculateBendSpecifications: (params: any) => apiClient.calculateBendSpecifications(params),
+  getBendTypes: () => apiClient.getBendTypes(),
+  getBendCenterToFace: (bendType: string, nominalBoreMm: number, degrees: number) => 
+    apiClient.getBendCenterToFace(bendType, nominalBoreMm, degrees),
+  getWeldTypes: () => apiClient.getWeldTypes(),
+  getWeldTypeById: (id: number) => apiClient.getWeldTypeById(id),
 };
 
 export const authApi = {

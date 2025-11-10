@@ -208,8 +208,8 @@ export class PipeDimensionService {
       throw new NotFoundException(`No pipe dimensions found for ${nominalBore}mm nominal bore`);
     }
 
-    // Convert working pressure from bar to MPa (1 bar = 0.1 MPa)
-    const workingPressureMpa = workingPressure * 0.1;
+    // Working pressure is already in MPa (converted by frontend)
+    const workingPressureMpa = workingPressure;
 
     // Build query to find pipe dimensions
     let query = this.pipeRepo
@@ -310,7 +310,7 @@ export class PipeDimensionService {
       throw new NotFoundException(`No pipe dimensions found for ${nominalBore}mm nominal bore`);
     }
 
-    const workingPressureMpa = workingPressure * 0.1;
+    const workingPressureMpa = workingPressure;
 
     let query = this.pipeRepo
       .createQueryBuilder('pipe')

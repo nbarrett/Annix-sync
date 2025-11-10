@@ -12,11 +12,14 @@ import {
 import { 
   generateSystemReferenceNumber,
   generateItemNumber,
+  generateClientItemNumber,
   generatePipeDescription,
   calculateScheduleFromPressureAndNB,
   calculateWallThicknessFromPressureAndNB,
   updateQuantityOrTotalLength,
-  getAvailableFlangeClasses
+  getAvailableFlangeClasses,
+  getWallThicknessForSchedule,
+  getPipeEndConfigurationDetails
 } from '@/app/lib/utils/systemUtils';
 
 interface Props {
@@ -32,14 +35,14 @@ interface MasterData {
   nominalBores?: Array<{ id: number; nominal_diameter_mm: number; outside_diameter_mm: number }>;
 }
 
-// Pipe end configuration options
+// Pipe end configuration options with weld counts
 const PIPE_END_OPTIONS = [
-  { value: 'PE', label: 'PE - Plain ended' },
-  { value: 'FOE', label: 'FOE - Flanged one end' },
-  { value: 'FBE', label: 'FBE - Flanged both ends' },
-  { value: 'FOE_LF', label: 'FOE + L/F - Flanged one end + loose flange for site weld' },
-  { value: 'FOE_RF', label: 'FOE + R/F - Flanged one end + Rotating flange' },
-  { value: '2X_RF', label: '2 x R/F - Rotating flanges both ends' },
+  { value: 'PE', label: 'PE - Plain ended (0 welds)' },
+  { value: 'FOE', label: 'FOE - Flanged one end (0 welds)' },
+  { value: 'FBE', label: 'FBE - Flanged both ends (2 flange welds)' },
+  { value: 'FOE_LF', label: 'FOE + L/F - Flanged one end + loose flange (1 flange weld)' },
+  { value: 'FOE_RF', label: 'FOE + R/F - Flanged one end + rotating flange (2 flange welds)' },
+  { value: '2X_RF', label: '2 x R/F - Rotating flanges both ends (2 flange welds)' },
 ] as const;
 
 function ProjectDetailsStep({ rfqData, onUpdate, errors }: any) {
@@ -104,6 +107,51 @@ function ProjectDetailsStep({ rfqData, onUpdate, errors }: any) {
           </p>
           {errors.projectName && (
             <p className="mt-2 text-sm text-red-600">{errors.projectName}</p>
+          )}
+        </div>
+
+        {/* Project Type Selection */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-900 mb-3">
+            Project Type *
+          </label>
+          <p className="text-xs text-gray-600 mb-4">
+            Select the type of submission to help suppliers understand the project phase and quote accordingly
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { value: 'feasibility', label: 'Feasibility Study', description: 'Early phase cost estimation' },
+              { value: 'phase1', label: 'Phase 1 Tender', description: 'First round tender submission' },
+              { value: 'retender', label: 'Re-Tender', description: 'Follow-up tender submission' },
+              { value: 'standard', label: 'Standard RFQ', description: 'Regular quotation request' }
+            ].map((type) => (
+              <div key={type.value} className="relative">
+                <label className="flex flex-col items-center p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="projectType"
+                    value={type.value}
+                    checked={rfqData.projectType === type.value}
+                    onChange={(e) => onUpdate('projectType', e.target.value)}
+                    className="sr-only"
+                  />
+                  <div className={`w-4 h-4 border-2 rounded-full mb-2 flex items-center justify-center ${
+                    rfqData.projectType === type.value 
+                      ? 'border-blue-600 bg-blue-600' 
+                      : 'border-gray-300'
+                  }`}>
+                    {rfqData.projectType === type.value && (
+                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                    )}
+                  </div>
+                  <span className="text-sm font-medium text-gray-900 text-center">{type.label}</span>
+                  <span className="text-xs text-gray-500 text-center mt-1">{type.description}</span>
+                </label>
+              </div>
+            ))}
+          </div>
+          {errors.projectType && (
+            <p className="mt-2 text-sm text-red-600">{errors.projectType}</p>
           )}
         </div>
 
@@ -413,22 +461,23 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
     ? Array.from(new Set(masterData.nominalBores.map((nb: any) => nb.nominal_diameter_mm as number))).sort((a, b) => (a as number) - (b as number))
     : [15, 20, 25, 32, 40, 50, 65, 80, 100, 125, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000]) as number[]; // fallback values
 
-  // Check for potentially invalid schedules (Sch10, Sch20, Sch30, etc. that don't exist for all NBs)
-  const hasInvalidSchedules = entries.some((entry: StraightPipeEntry) => {
-    const schedule = entry.specs.scheduleNumber;
-    return schedule && (schedule === 'Sch10' || schedule === 'Sch20' || schedule === 'Sch30' || schedule === 'Sch5');
-  });
+  // Check for potentially invalid schedules - these are now supported so removing this warning
+  // const hasInvalidSchedules = entries.some((entry: StraightPipeEntry) => {
+  //   const schedule = entry.specs.scheduleNumber;
+  //   return schedule && (schedule === 'Sch10' || schedule === 'Sch20' || schedule === 'Sch30' || schedule === 'Sch5');
+  // });
 
   const fixInvalidSchedules = () => {
-    entries.forEach((entry: StraightPipeEntry) => {
-      const schedule = entry.specs.scheduleNumber;
-      if (schedule === 'Sch10' || schedule === 'Sch20' || schedule === 'Sch30' || schedule === 'Sch5') {
-        onUpdateEntry(entry.id, {
-          specs: { ...entry.specs, scheduleNumber: 'STD' } // Default to STD
-        });
-      }
-    });
-    alert('Invalid schedules have been changed to STD. Please review and adjust if needed.');
+    // This function is no longer needed since we support all standard schedules
+    // entries.forEach((entry: StraightPipeEntry) => {
+    //   const schedule = entry.specs.scheduleNumber;
+    //   if (schedule === 'Sch10' || schedule === 'Sch20' || schedule === 'Sch30' || schedule === 'Sch5') {
+    //     onUpdateEntry(entry.id, {
+    //       specs: { ...entry.specs, scheduleNumber: 'STD' } // Default to STD
+    //     });
+    //   }
+    // });
+    // alert('Invalid schedules have been changed to STD. Please review and adjust if needed.');
   };
 
   const handleCalculateAll = async () => {
@@ -470,16 +519,25 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
     const nominalBore = entry.specs.nominalBoreMm;
     const steelSpecId = globalSpecs?.steelSpecificationId;
     
+    console.log('🔍 Auto-calculating specs:', { pressure, nominalBore, steelSpecId });
+    
     if (pressure && nominalBore) {
       try {
         const { masterDataApi } = await import('@/app/lib/api/client');
         
+        // Convert pressure from bar to MPa (1 bar = 0.1 MPa) as expected by API
+        const pressureMpa = pressure * 0.1;
+        
+        console.log('📡 Calling API with:', { nominalBore, pressureMpa });
+        
         const recommended = await masterDataApi.getRecommendedSpecs(
           nominalBore,
-          pressure,
+          pressureMpa,
           entry.specs.workingTemperatureC || globalSpecs?.workingTemperatureC || 20,
           steelSpecId
         );
+        
+        console.log('✅ API returned:', recommended);
         
         return {
           scheduleNumber: recommended.schedule,
@@ -491,9 +549,44 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
           isScheduleOverridden: false
         };
       } catch (error) {
-        console.error('Error auto-calculating specs:', error);
-        return {};
+        console.error('❌ Error auto-calculating specs:', error);
+        
+        // Fallback to simple calculation based on pressure and nominal bore
+        let fallbackSchedule = 'Sch40';
+        let fallbackWallThickness = 3.6;
+        
+        // Simple pressure-based fallback logic
+        if (pressure <= 10) {
+          fallbackSchedule = 'Sch10';
+          fallbackWallThickness = Math.max(2.0, nominalBore * 0.03);
+        } else if (pressure <= 25) {
+          fallbackSchedule = 'Sch20';
+          fallbackWallThickness = Math.max(3.0, nominalBore * 0.04);
+        } else if (pressure <= 40) {
+          fallbackSchedule = 'Sch40';
+          fallbackWallThickness = Math.max(3.6, nominalBore * 0.05);
+        } else if (pressure <= 80) {
+          fallbackSchedule = 'Sch80';
+          fallbackWallThickness = Math.max(5.5, nominalBore * 0.07);
+        } else {
+          fallbackSchedule = 'Sch160';
+          fallbackWallThickness = Math.max(8.0, nominalBore * 0.10);
+        }
+        
+        console.log(`🔧 Using fallback calculation: ${fallbackSchedule} (${fallbackWallThickness}mm) for ${nominalBore}mm NB at ${pressure} bar`);
+        
+        return {
+          scheduleNumber: fallbackSchedule,
+          wallThicknessMm: fallbackWallThickness,
+          workingPressureBar: pressure,
+          minimumSchedule: fallbackSchedule,
+          minimumWallThickness: fallbackWallThickness,
+          availableUpgrades: [],
+          isScheduleOverridden: false
+        };
       }
+    } else {
+      console.log('⚠️ Skipping auto-calculation - missing pressure or nominal bore:', { pressure, nominalBore });
     }
     return {};
   };
@@ -534,6 +627,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Item Upload</h2>
         <div className="flex gap-3">
+          {/* Invalid schedules warning removed - all standard schedules now supported
           {hasInvalidSchedules && (
             <button
               onClick={fixInvalidSchedules}
@@ -543,6 +637,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
               ⚠️ Fix Invalid Schedules
             </button>
           )}
+          */}
           <button
             onClick={() => onAddEntry()}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
@@ -583,7 +678,8 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                 <textarea
                   value={entry.description || generateItemDescription(entry)}
                   onChange={(e) => onUpdateEntry(entry.id, { description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900 min-h-[60px]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                  rows={2}
                   placeholder="Enter item description..."
                   required
                 />
@@ -613,10 +709,10 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                   value={entry.clientItemNumber || ''}
                   onChange={(e) => onUpdateEntry(entry.id, { clientItemNumber: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  placeholder="Leave empty for auto-generated number (e.g., ITM-001)"
+                  placeholder="Auto-generated from customer name (e.g., PLS-0001)"
                 />
                 <p className="mt-0.5 text-xs text-gray-700">
-                  Your reference number for this item (auto-generated if left empty)
+                  3 letters from customer name + 4 digits (auto-generated, can be overridden)
                 </p>
               </div>
 
@@ -714,7 +810,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                             </label>
                             <select
                               value={entry.specs.scheduleNumber || ''}
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const newSchedule = e.target.value;
                                 // Check if it's a downgrade
                                 const isDowngrade = entry.minimumSchedule && newSchedule && 
@@ -728,21 +824,44 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                                   return;
                                 }
                                 
+                                // Auto-populate wall thickness based on schedule and nominal bore
+                                let autoWallThickness = null;
+                                if (newSchedule && entry.specs.nominalBoreMm) {
+                                  try {
+                                    autoWallThickness = await getWallThicknessForSchedule(
+                                      entry.specs.nominalBoreMm, 
+                                      newSchedule
+                                    );
+                                  } catch (error) {
+                                    console.warn('Could not auto-populate wall thickness:', error);
+                                  }
+                                }
+                                
                                 onUpdateEntry(entry.id, {
-                                  specs: { ...entry.specs, scheduleNumber: newSchedule },
+                                  specs: { 
+                                    ...entry.specs, 
+                                    scheduleNumber: newSchedule,
+                                    wallThicknessMm: autoWallThickness || entry.specs.wallThicknessMm
+                                  },
                                   isScheduleOverridden: newSchedule !== entry.minimumSchedule
                                 });
                               }}
                               className="w-full px-2 py-1.5 text-black border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                             >
                               <option value="">Select schedule...</option>
+                              <option value="10">Schedule 10</option>
+                              <option value="20">Schedule 20</option>
+                              <option value="30">Schedule 30</option>
+                              <option value="40">Schedule 40</option>
+                              <option value="60">Schedule 60</option>
+                              <option value="80">Schedule 80</option>
+                              <option value="100">Schedule 100</option>
+                              <option value="120">Schedule 120</option>
+                              <option value="140">Schedule 140</option>
+                              <option value="160">Schedule 160</option>
                               <option value="STD">STD (Standard)</option>
                               <option value="XS">XS (Extra Strong)</option>
                               <option value="XXS">XXS (Double Extra Strong)</option>
-                              <option value="40">Schedule 40</option>
-                              <option value="80">Schedule 80</option>
-                              <option value="120">Schedule 120</option>
-                              <option value="160">Schedule 160</option>
                               <option value="MEDIUM">Medium</option>
                               <option value="HEAVY">Heavy</option>
                             </select>
@@ -894,9 +1013,23 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                     </label>
                     <select
                       value={entry.specs.pipeEndConfiguration || 'PE'}
-                      onChange={(e) => onUpdateEntry(entry.id, {
-                        specs: { ...entry.specs, pipeEndConfiguration: e.target.value as any }
-                      })}
+                      onChange={async (e) => {
+                        const newConfig = e.target.value as any;
+                        
+                        // Get weld details for this configuration
+                        let weldDetails = null;
+                        try {
+                          weldDetails = await getPipeEndConfigurationDetails(newConfig);
+                        } catch (error) {
+                          console.warn('Could not get pipe end configuration details:', error);
+                        }
+                        
+                        onUpdateEntry(entry.id, {
+                          specs: { ...entry.specs, pipeEndConfiguration: newConfig },
+                          // Store weld count information if available
+                          ...(weldDetails && { weldInfo: weldDetails })
+                        });
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                       required
                     >
@@ -906,6 +1039,12 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                     </select>
                     <p className="mt-0.5 text-xs text-gray-700">
                       Select how the pipe ends should be configured
+                      {/* Show weld count information if available */}
+                      {(entry as any).weldInfo && (
+                        <span className="ml-2 text-blue-600 font-medium">
+                          • {(entry as any).weldInfo.weldCount} welds per pipe
+                        </span>
+                      )}
                     </p>
                   </div>
 
@@ -975,10 +1114,38 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                     </label>
                     
                     {globalSpecs?.flangeStandardId ? (
-                      <div className="bg-green-50 p-2 rounded-md">
+                      <div className="bg-green-50 p-2 rounded-md space-y-2">
                         <p className="text-green-800 text-xs">
                           Using global flange standard from specifications page
                         </p>
+                        {/* Display recommended flange specification */}
+                        {globalSpecs?.flangePressureClassId && (
+                          <div className="bg-blue-50 p-2 rounded border-l-2 border-blue-300">
+                            <p className="text-blue-800 text-sm font-semibold">
+                              📋 Recommended Flange Spec: 
+                              <span className="ml-1">
+                                {(() => {
+                                  // Find pressure class designation
+                                  const pressureClass = masterData.pressureClasses.find(
+                                    (pc: any) => pc.id === globalSpecs.flangePressureClassId
+                                  );
+                                  // Find flange standard code
+                                  const flangeStandard = masterData.flangeStandards.find(
+                                    (fs: any) => fs.id === globalSpecs.flangeStandardId
+                                  );
+                                  
+                                  if (pressureClass && flangeStandard) {
+                                    return `${flangeStandard.code}/${pressureClass.designation}`;
+                                  }
+                                  return 'N/A';
+                                })()}
+                              </span>
+                            </p>
+                            <p className="text-blue-600 text-xs mt-1">
+                              For {entry.specs.workingPressureBar || globalSpecs?.workingPressureBar || 'N/A'} bar working pressure
+                            </p>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -1011,6 +1178,46 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                             </option>
                           ))}
                         </select>
+                        
+                        {/* Individual Item Flange Specification Display */}
+                        {entry.specs.flangeStandardId && entry.specs.flangePressureClassId && (
+                          <div className="bg-blue-50 border border-blue-200 p-3 rounded-md mt-2">
+                            <h5 className="text-sm font-semibold text-blue-800 mb-2">
+                              🔧 Item-Specific Flange Specification
+                            </h5>
+                            <div className="bg-white p-2 rounded border border-blue-200">
+                              <p className="text-sm font-medium text-blue-900">
+                                Selected Specification: 
+                                <span className="ml-2 font-bold text-lg text-blue-800">
+                                  {(() => {
+                                    const flangeStandard = masterData.flangeStandards.find(
+                                      (fs: any) => fs.id === entry.specs.flangeStandardId
+                                    );
+                                    const pressureClass = masterData.pressureClasses.find(
+                                      (pc: any) => pc.id === entry.specs.flangePressureClassId
+                                    );
+                                    
+                                    if (flangeStandard && pressureClass) {
+                                      return `${flangeStandard.code}/${pressureClass.designation}`;
+                                    }
+                                    return 'N/A';
+                                  })()}
+                                </span>
+                              </p>
+                              <div className="text-xs text-blue-600 mt-1 grid grid-cols-2 gap-2">
+                                <div>
+                                  <span className="font-medium">Standard:</span> {masterData.flangeStandards.find((fs: any) => fs.id === entry.specs.flangeStandardId)?.code || 'N/A'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Pressure Class:</span> {masterData.pressureClasses.find((pc: any) => pc.id === entry.specs.flangePressureClassId)?.designation || 'N/A'}
+                                </div>
+                              </div>
+                              <p className="text-blue-600 text-xs mt-2">
+                                💡 This item uses individual flange specification (overrides global settings)
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1097,6 +1304,32 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                           </div>
                         </div>
                       </div>
+
+                      {/* Pipe End Configuration Welds */}
+                      {(entry as any).weldInfo && (
+                        <div className="bg-green-50 p-2 rounded">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-xs text-green-700 font-medium">Pipe End Config Welds</p>
+                              <p className="text-lg font-bold text-green-900">
+                                {(entry as any).weldInfo.weldCount} per pipe
+                              </p>
+                              <p className="text-xs text-green-600">
+                                Total: {(entry as any).weldInfo.weldCount * (entry.calculation?.calculatedPipeCount || 0)} welds
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs text-green-700 font-medium">Configuration</p>
+                              <p className="text-sm font-semibold text-green-900">
+                                {entry.specs.pipeEndConfiguration || 'PE'}
+                              </p>
+                              <p className="text-xs text-green-600">
+                                {(entry as any).weldInfo.description}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Summary Note */}
                       <p className="text-xs text-blue-900 font-medium bg-blue-100 p-2 rounded mt-2">
@@ -1330,11 +1563,7 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
     
     switch (currentStep) {
       case 1:
-        errors = validatePage1RequiredFields(
-          rfqData.customerEmail,
-          rfqData.customerPhone,
-          rfqData.requiredDate
-        );
+        errors = validatePage1RequiredFields(rfqData);
         break;
       case 2:
         errors = validatePage2Specifications(rfqData.globalSpecs);
@@ -1359,15 +1588,17 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
     }
   }, [rfqData.straightPipeEntries.length, addStraightPipeEntry]);
 
-  // Auto-generate item numbers for entries without client item numbers
+  // Auto-generate client item numbers based on customer name
   useEffect(() => {
-    rfqData.straightPipeEntries.forEach((entry) => {
-      if (!entry.clientItemNumber || entry.clientItemNumber.trim() === '') {
-        const autoGenNumber = generateItemNumber();
-        updateStraightPipeEntry(entry.id, { clientItemNumber: autoGenNumber });
-      }
-    });
-  }, [rfqData.straightPipeEntries, updateStraightPipeEntry]);
+    if (rfqData.customerName) {
+      rfqData.straightPipeEntries.forEach((entry, index) => {
+        if (!entry.clientItemNumber || entry.clientItemNumber.trim() === '') {
+          const autoGenNumber = generateClientItemNumber(rfqData.customerName, index + 1);
+          updateStraightPipeEntry(entry.id, { clientItemNumber: autoGenNumber });
+        }
+      });
+    }
+  }, [rfqData.straightPipeEntries, rfqData.customerName, updateStraightPipeEntry]);
 
   const handleCalculateAll = async () => {
     try {

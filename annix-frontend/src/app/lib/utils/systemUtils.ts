@@ -31,6 +31,52 @@ export function generateItemNumber(): string {
 }
 
 /**
+ * Generate client item number based on customer name
+ * Format: ABC-0001 where ABC is 3 letters from customer name
+ * @param customerName - Customer/company name
+ * @param itemIndex - Sequential item number (1-based)
+ * @returns Generated client item number
+ */
+export function generateClientItemNumber(customerName: string, itemIndex: number): string {
+  if (!customerName) {
+    return `CLI-${String(itemIndex).padStart(4, '0')}`;
+  }
+
+  // Extract 3 letters from customer name
+  // Priority: 1) First letter of each word, 2) First 3 consonants, 3) First 3 letters
+  const words = customerName.toUpperCase().split(/\s+/).filter(word => word.length > 0);
+  
+  let prefix = '';
+  
+  if (words.length >= 3) {
+    // Take first letter of first 3 words
+    prefix = words.slice(0, 3).map(word => word[0]).join('');
+  } else if (words.length === 2) {
+    // Take first letter of each word + first consonant of first word
+    const firstWord = words[0];
+    const consonants = firstWord.split('').filter(char => 
+      /[BCDFGHJKLMNPQRSTVWXYZ]/.test(char) && char !== firstWord[0]
+    );
+    prefix = words[0][0] + words[1][0] + (consonants[0] || firstWord[1] || 'X');
+  } else {
+    // Single word - take first 3 consonants, fallback to first 3 letters
+    const word = words[0] || customerName.toUpperCase();
+    const consonants = word.split('').filter(char => /[BCDFGHJKLMNPQRSTVWXYZ]/.test(char));
+    if (consonants.length >= 3) {
+      prefix = consonants.slice(0, 3).join('');
+    } else {
+      prefix = word.substring(0, 3).padEnd(3, 'X');
+    }
+  }
+
+  // Ensure we have exactly 3 characters
+  prefix = prefix.substring(0, 3).padEnd(3, 'X');
+  
+  const sequentialNumber = String(itemIndex).padStart(4, '0');
+  return `${prefix}-${sequentialNumber}`;
+}
+
+/**
  * Auto-generate pipe description
  * @param nominalBore - Nominal bore in mm
  * @param schedule - Schedule number or wall thickness
@@ -288,5 +334,64 @@ export async function getAvailableFlangeClasses(flangeStandardId: number): Promi
     };
 
     return flangeClassMap[flangeStandardId] || [];
+  }
+}
+
+/**
+ * Get wall thickness for a given nominal bore and schedule
+ * @param nominalBoreMm - Nominal bore in mm
+ * @param scheduleNumber - Schedule designation
+ * @returns Promise with wall thickness in mm
+ */
+export async function getWallThicknessForSchedule(nominalBoreMm: number, scheduleNumber: string): Promise<number | null> {
+  try {
+    // Import API client dynamically to avoid circular dependencies
+    const { masterDataApi } = await import('../api/client');
+    
+    const pipeDimensions = await masterDataApi.getPipeDimensions(nominalBoreMm);
+    
+    // Find the dimension with matching schedule
+    const dimension = pipeDimensions.find(d => 
+      d.scheduleDesignation === scheduleNumber || 
+      d.scheduleNumber?.toString() === scheduleNumber
+    );
+    
+    return dimension?.wallThicknessMm || null;
+  } catch (error) {
+    console.error('Error getting wall thickness from API:', error);
+    return null;
+  }
+}
+
+/**
+ * Get pipe end configuration details including weld count
+ * @param configCode - Pipe end configuration code (PE, FOE, FBE, etc.)
+ * @returns Promise with configuration details and weld count
+ */
+export async function getPipeEndConfigurationDetails(configCode: string): Promise<{ weldCount: number; description: string } | null> {
+  try {
+    // Import API client dynamically
+    const { masterDataApi } = await import('../api/client');
+    
+    const response = await masterDataApi.getPipeEndConfigurationByCode(configCode);
+    
+    return {
+      weldCount: response.weldCount || 0,
+      description: response.description || ''
+    };
+  } catch (error) {
+    console.error('Error getting pipe end configuration:', error);
+    
+    // Fallback mapping based on requirements
+    const configMap: Record<string, { weldCount: number; description: string }> = {
+      'PE': { weldCount: 0, description: 'Plain ended - no welds' },
+      'FOE': { weldCount: 0, description: 'Flanged one end - no welds' },
+      'FBE': { weldCount: 2, description: 'Flanged both ends - 2 flange welds' },
+      'FOE_LF': { weldCount: 1, description: 'FOE + loose flange - 1 flange weld' },
+      'FOE_RF': { weldCount: 2, description: 'FOE + rotating flange - 2 flange welds' },
+      '2X_RF': { weldCount: 2, description: '2x rotating flanges - 2 flange welds' }
+    };
+    
+    return configMap[configCode] || null;
   }
 }

@@ -10,39 +10,32 @@ export interface ValidationErrors {
 
 /**
  * Validate Page 1 required fields
- * @param email - Customer email
- * @param contactNumber - Customer phone
- * @param requiredDate - Required date
+ * @param rfqData - RFQ data object
  * @returns Object with validation errors
  */
-export function validatePage1RequiredFields(
-  email: string,
-  contactNumber: string,
-  requiredDate: string
-): ValidationErrors {
+export function validatePage1RequiredFields(rfqData: any): ValidationErrors {
   const errors: ValidationErrors = {};
 
-  // Email validation
-  if (!email) {
-    errors.customerEmail = 'Email address is required';
-  } else if (!isValidEmail(email)) {
+  // Project name validation
+  if (!rfqData.projectName || rfqData.projectName.trim() === '') {
+    errors.projectName = 'Project/RFQ name is required';
+  }
+
+  // Customer name validation
+  if (!rfqData.customerName || rfqData.customerName.trim() === '') {
+    errors.customerName = 'Customer name is required';
+  }
+
+  // Description validation
+  if (!rfqData.description || rfqData.description.trim() === '') {
+    errors.description = 'Project description is required';
+  }
+
+  // Customer email validation
+  if (!rfqData.customerEmail || rfqData.customerEmail.trim() === '') {
+    errors.customerEmail = 'Customer email is required';
+  } else if (!isValidEmail(rfqData.customerEmail)) {
     errors.customerEmail = 'Please enter a valid email address';
-  }
-
-  // Phone validation
-  if (!contactNumber) {
-    errors.customerPhone = 'Contact number is required';
-  } else if (!isValidPhoneNumber(contactNumber)) {
-    errors.customerPhone = 'Please enter a valid phone number';
-  }
-
-  // Required date validation
-  if (!requiredDate) {
-    errors.requiredDate = 'Required date is required';
-  } else if (!isValidDate(requiredDate)) {
-    errors.requiredDate = 'Please enter a valid date';
-  } else if (new Date(requiredDate) < new Date()) {
-    errors.requiredDate = 'Required date cannot be in the past';
   }
 
   return errors;
@@ -144,25 +137,23 @@ function isValidDate(dateString: string): boolean {
  * Check if all required fields are valid for progression
  * @param step - Current step number
  * @param formData - Form data object
+ * @param entries - RFQ entries array (for step 3)
  * @returns boolean indicating if can proceed
  */
-export function canProceedToNextStep(step: number, formData: any): boolean {
+export function canProceedToNextStep(step: number, formData: any, entries?: any[]): boolean {
   switch (step) {
     case 1:
-      const page1Errors = validatePage1RequiredFields(
-        formData.customerEmail,
-        formData.customerPhone,
-        formData.requiredDate
-      );
+      const page1Errors = validatePage1RequiredFields(formData);
       return Object.keys(page1Errors).length === 0;
 
     case 2:
-      const page2Errors = validatePage2Specifications(formData.globalSpecs);
+      const page2Errors = validatePage2Specifications(formData.globalSpecs || {});
       return Object.keys(page2Errors).length === 0;
 
     case 3:
-      const page3Errors = validatePage3Items(formData.straightPipeEntries);
-      return Object.keys(page3Errors).length === 0;
+      if (!entries) return false;
+      const page3Errors = validatePage3Items(entries);
+      return Object.keys(page3Errors).length === 0 && entries.length > 0;
 
     default:
       return true;
