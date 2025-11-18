@@ -333,4 +333,18 @@ export class PipeDimensionService {
     // Sort by wall thickness ascending (show closest upgrades first)
     return higherSchedules.sort((a, b) => a.wall_thickness_mm - b.wall_thickness_mm);
   }
+
+  async findAllBySpecAndNominal(steelSpecId: number, nominalId: number): Promise<PipeDimension[]> {
+    const pipes = await this.pipeRepo.find({
+      where: {
+        steelSpecification: { id: steelSpecId },
+        nominalOutsideDiameter: { id: nominalId },
+      },
+      relations: ['nominalOutsideDiameter', 'steelSpecification', 'pressures'],
+      order: {
+        wall_thickness_mm: 'ASC',
+      },
+    });
+    return pipes;
+  }
 }

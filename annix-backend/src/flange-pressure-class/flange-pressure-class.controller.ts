@@ -49,4 +49,13 @@ export class FlangePressureClassController {
   remove(@Param('id') id: string) {
     return this.flangePressureClassService.remove(+id);
   }
+
+  @Get('standard/:standardId')
+  @ApiOperation({ summary: 'Get all flange pressure classes by standard ID' })
+  @ApiResponse({ status: 200, description: 'List of flange pressure classes retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Flange standard not found' })
+  @ApiResponse({ status: 400, description: 'Invalid standard ID parameter' })
+  getAllByStandard(@Param('standardId') standardId: string) {
+    return this.flangePressureClassService.getAllByStandard(+standardId);
+  }
 }

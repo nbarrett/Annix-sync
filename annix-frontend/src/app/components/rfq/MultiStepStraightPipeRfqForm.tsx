@@ -37,13 +37,39 @@ interface MasterData {
 
 // Pipe end configuration options with weld counts
 const PIPE_END_OPTIONS = [
-  { value: 'PE', label: 'PE - Plain ended (0 welds)' },
-  { value: 'FOE', label: 'FOE - Flanged one end (0 welds)' },
-  { value: 'FBE', label: 'FBE - Flanged both ends (2 flange welds)' },
-  { value: 'FOE_LF', label: 'FOE + L/F - Flanged one end + loose flange (1 flange weld)' },
-  { value: 'FOE_RF', label: 'FOE + R/F - Flanged one end + rotating flange (2 flange welds)' },
-  { value: '2X_RF', label: '2 x R/F - Rotating flanges both ends (2 flange welds)' },
+  { value: 'PE', label: 'PE - Plain ended (0 welds)', weldCount: 0 },
+  { value: 'FOE', label: 'FOE - Flanged one end (0 welds)', weldCount: 0 },
+  { value: 'FBE', label: 'FBE - Flanged both ends (2 flange welds)', weldCount: 2 },
+  { value: 'FOE_LF', label: 'FOE + L/F - Flanged one end + loose flange (1 flange weld)', weldCount: 1 },
+  { value: 'FOE_RF', label: 'FOE + R/F - Flanged one end + rotating flange (2 flange welds)', weldCount: 2 },
+  { value: '2X_RF', label: '2 x R/F - Rotating flanges both ends (2 flange welds)', weldCount: 2 },
 ] as const;
+
+// Helper function to get weld count per pipe based on pipe end configuration
+const getWeldCountPerPipe = (pipeEndConfig: string): number => {
+  const config = PIPE_END_OPTIONS.find(opt => opt.value === pipeEndConfig);
+  return config?.weldCount ?? 0;
+};
+
+// Helper function to calculate number of flanges required based on pipe end configuration
+const getFlangesPerPipe = (pipeEndConfig: string): number => {
+  switch (pipeEndConfig) {
+    case 'PE':  // Plain ended - no flanges
+      return 0;
+    case 'FOE': // Flanged one end - 1 flange
+      return 1;
+    case 'FBE': // Flanged both ends - 2 flanges
+      return 2;
+    case 'FOE_LF': // Flanged one end + loose flange - 2 flanges (1 fixed + 1 loose)
+      return 2;
+    case 'FOE_RF': // Flanged one end + rotating flange - 2 flanges
+      return 2;
+    case '2X_RF': // 2 rotating flanges - 2 flanges
+      return 2;
+    default:
+      return 0;
+  }
+};
 
 function ProjectDetailsStep({ rfqData, onUpdate, errors }: any) {
   const [additionalNotes, setAdditionalNotes] = useState<string[]>([]);
@@ -307,7 +333,7 @@ function ProjectDetailsStep({ rfqData, onUpdate, errors }: any) {
   );
 }
 
-function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, errors }: any) {
+function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, errors, fetchAndSelectPressureClass, availablePressureClasses }: any) {
   const workingPressures = [6, 10, 16, 25, 40, 63, 100, 160, 250, 320, 400, 630]; // Bar values
   const workingTemperatures = [-29, -20, 0, 20, 50, 80, 120, 150, 200, 250, 300, 350, 400, 450, 500]; // Celsius values
 
@@ -415,10 +441,23 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
               </label>
               <select
                 value={globalSpecs?.flangeStandardId || ''}
-                onChange={(e) => onUpdateGlobalSpecs({
-                  ...globalSpecs,
-                  flangeStandardId: e.target.value ? Number(e.target.value) : undefined
-                })}
+                onChange={async (e) => {
+                  const standardId = e.target.value ? Number(e.target.value) : undefined;
+                  
+                  // Fetch pressure classes and auto-select recommended
+                  let recommendedPressureClassId = undefined;
+                  if (standardId && globalSpecs?.workingPressureBar) {
+                    recommendedPressureClassId = await fetchAndSelectPressureClass(standardId, globalSpecs.workingPressureBar);
+                  } else if (standardId) {
+                    await fetchAndSelectPressureClass(standardId);
+                  }
+                  
+                  onUpdateGlobalSpecs({
+                    ...globalSpecs,
+                    flangeStandardId: standardId,
+                    flangePressureClassId: recommendedPressureClassId || globalSpecs?.flangePressureClassId
+                  });
+                }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               >
                 <option value="">Select flange standard...</option>
@@ -432,6 +471,38 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
                 Leave empty to specify per item on the next page
               </p>
             </div>
+            
+            {/* Flange Pressure Class - shown after standard is selected */}
+            {globalSpecs?.flangeStandardId && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Flange Pressure Class
+                  {globalSpecs?.workingPressureBar && (
+                    <span className="ml-2 text-xs text-blue-600 font-normal">
+                      (Auto-selected for {globalSpecs.workingPressureBar} bar)
+                    </span>
+                  )}
+                </label>
+                <select
+                  value={globalSpecs?.flangePressureClassId || ''}
+                  onChange={(e) => onUpdateGlobalSpecs({
+                    ...globalSpecs,
+                    flangePressureClassId: e.target.value ? Number(e.target.value) : undefined
+                  })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                >
+                  <option value="">Select pressure class...</option>
+                  {availablePressureClasses.map((pc: any) => (
+                    <option key={pc.id} value={pc.id}>
+                      {pc.designation}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Recommended class auto-selected, but can be overridden
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -452,7 +523,7 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
   );
 }
 
-function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdateEntry, onRemoveEntry, onCalculate, errors, loading }: any) {
+function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdateEntry, onRemoveEntry, onCalculate, errors, loading, fetchAvailableSchedules, availableSchedulesMap }: any) {
   const [isCalculating, setIsCalculating] = useState(false);
 
   // Use nominal bores from master data, fallback to hardcoded values
@@ -504,13 +575,27 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
   };
 
   const generateItemDescription = (entry: any) => {
-    return generatePipeDescription(
-      entry.specs.nominalBoreMm,
-      entry.specs.scheduleNumber,
-      entry.specs.wallThicknessMm,
-      undefined, // Steel spec name - would need to lookup from masterData
-      globalSpecs?.workingPressureBar || entry.specs.workingPressureBar
-    );
+    const nb = entry.specs.nominalBoreMm || 'XX';
+    let schedule = entry.specs.scheduleNumber || (entry.specs.wallThicknessMm ? `${entry.specs.wallThicknessMm}WT` : 'XX');
+    const pressure = globalSpecs?.workingPressureBar || entry.specs.workingPressureBar || 'XX';
+    const pipeEndConfig = entry.specs.pipeEndConfiguration || 'PE';
+    if(schedule.startsWith('Sch')){
+      schedule = schedule.substring(3);
+    }
+    // Get steel spec name if available
+    const steelSpec = entry.specs.steelSpecificationId 
+      ? masterData.steelSpecs.find((s: any) => s.id === entry.specs.steelSpecificationId)?.steelSpecName
+      : globalSpecs?.steelSpecificationId
+        ? masterData.steelSpecs.find((s: any) => s.id === globalSpecs.steelSpecificationId)?.steelSpecName
+        : undefined;
+    
+    let description = `${nb}NB Sch${schedule} Straight Pipe (${pipeEndConfig}) for ${pressure} Bar Pipeline`;
+    
+    if (steelSpec) {
+      description += ` - ${steelSpec}`;
+    }
+    
+    return description;
   };
 
   // Auto-calculate schedule and wall thickness when pressure and NB are available
@@ -644,13 +729,10 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
           >
             + Add Another Item
           </button>
-          <button
-            onClick={handleCalculateAll}
-            disabled={isCalculating || loading}
-            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isCalculating || loading ? 'Calculating...' : '🔄 Calculate All'}
-          </button>
+          <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+            <span className="text-green-700 font-semibold">✓ Auto-calculating</span>
+            <span className="text-xs text-green-600">Results update automatically</span>
+          </div>
         </div>
       </div>
 
@@ -741,6 +823,10 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                           }
                         });
                         
+                        // Fetch available schedules for this combination
+                        const steelSpecId = entry.specs.steelSpecificationId || globalSpecs.steelSpecificationId || 2;
+                        await fetchAvailableSchedules(entry.id, steelSpecId, nominalBore);
+                        
                         // Then calculate auto specs asynchronously
                         try {
                           const autoSpecs = await autoCalculateSpecs({ 
@@ -812,6 +898,13 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                               value={entry.specs.scheduleNumber || ''}
                               onChange={async (e) => {
                                 const newSchedule = e.target.value;
+                                
+                                // Find the selected dimension to get wall thickness
+                                const availableSchedules = availableSchedulesMap[entry.id] || [];
+                                const selectedDimension = availableSchedules.find((dim: any) => 
+                                  (dim.schedule_designation || dim.schedule_number?.toString()) === newSchedule
+                                );
+                                
                                 // Check if it's a downgrade
                                 const isDowngrade = entry.minimumSchedule && newSchedule && 
                                   entry.availableUpgrades && 
@@ -824,46 +917,38 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                                   return;
                                 }
                                 
-                                // Auto-populate wall thickness based on schedule and nominal bore
-                                let autoWallThickness = null;
-                                if (newSchedule && entry.specs.nominalBoreMm) {
-                                  try {
-                                    autoWallThickness = await getWallThicknessForSchedule(
-                                      entry.specs.nominalBoreMm, 
-                                      newSchedule
-                                    );
-                                  } catch (error) {
-                                    console.warn('Could not auto-populate wall thickness:', error);
-                                  }
-                                }
+                                // Use wall thickness from API data
+                                const autoWallThickness = selectedDimension?.wall_thickness_mm || null;
                                 
-                                onUpdateEntry(entry.id, {
+                                const updatedEntry: any = {
                                   specs: { 
                                     ...entry.specs, 
                                     scheduleNumber: newSchedule,
                                     wallThicknessMm: autoWallThickness || entry.specs.wallThicknessMm
                                   },
                                   isScheduleOverridden: newSchedule !== entry.minimumSchedule
-                                });
+                                };
+                                
+                                // Auto-update description
+                                updatedEntry.description = generateItemDescription({ ...entry, ...updatedEntry });
+                                
+                                onUpdateEntry(entry.id, updatedEntry);
                               }}
                               className="w-full px-2 py-1.5 text-black border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                             >
                               <option value="">Select schedule...</option>
-                              <option value="10">Schedule 10</option>
-                              <option value="20">Schedule 20</option>
-                              <option value="30">Schedule 30</option>
-                              <option value="40">Schedule 40</option>
-                              <option value="60">Schedule 60</option>
-                              <option value="80">Schedule 80</option>
-                              <option value="100">Schedule 100</option>
-                              <option value="120">Schedule 120</option>
-                              <option value="140">Schedule 140</option>
-                              <option value="160">Schedule 160</option>
-                              <option value="STD">STD (Standard)</option>
-                              <option value="XS">XS (Extra Strong)</option>
-                              <option value="XXS">XXS (Double Extra Strong)</option>
-                              <option value="MEDIUM">Medium</option>
-                              <option value="HEAVY">Heavy</option>
+                              {(availableSchedulesMap[entry.id] || []).map((dim: any) => {
+                                const scheduleValue = dim.schedule_designation || dim.schedule_number?.toString();
+                                const label = `${scheduleValue} (${dim.wall_thickness_mm}mm)`;
+                                return (
+                                  <option key={dim.id} value={scheduleValue}>
+                                    {label}
+                                  </option>
+                                );
+                              })}
+                              {(!availableSchedulesMap[entry.id] || availableSchedulesMap[entry.id].length === 0) && (
+                                <option disabled>No schedules available - select nominal bore first</option>
+                              )}
                             </select>
                           </div>
 
@@ -932,24 +1017,49 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                       <>
                         <select
                           value={entry.specs.scheduleNumber || ''}
-                          onChange={(e) => onUpdateEntry(entry.id, { 
-                            specs: { ...entry.specs, scheduleNumber: e.target.value }
-                          })}
+                          onChange={(e) => {
+                            const newSchedule = e.target.value;
+                            
+                            // Find the selected dimension to get wall thickness
+                            const availableSchedules = availableSchedulesMap[entry.id] || [];
+                            const selectedDimension = availableSchedules.find((dim: any) => 
+                              (dim.schedule_designation || dim.schedule_number?.toString()) === newSchedule
+                            );
+                            
+                            // Use wall thickness from API data
+                            const autoWallThickness = selectedDimension?.wall_thickness_mm || null;
+                            
+                            const updatedEntry: any = { 
+                              specs: { 
+                                ...entry.specs, 
+                                scheduleNumber: newSchedule,
+                                wallThicknessMm: autoWallThickness || entry.specs.wallThicknessMm
+                              }
+                            };
+                            
+                            // Auto-update description
+                            updatedEntry.description = generateItemDescription({ ...entry, ...updatedEntry });
+                            
+                            onUpdateEntry(entry.id, updatedEntry);
+                          }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                         >
                           <option value="">Select schedule...</option>
-                          <option value="STD">STD (Standard)</option>
-                          <option value="XS">XS (Extra Strong)</option>
-                          <option value="XXS">XXS (Double Extra Strong)</option>
-                          <option value="40">Schedule 40</option>
-                          <option value="80">Schedule 80</option>
-                          <option value="120">Schedule 120</option>
-                          <option value="160">Schedule 160</option>
-                          <option value="MEDIUM">Medium</option>
-                          <option value="HEAVY">Heavy</option>
+                          {(availableSchedulesMap[entry.id] || []).map((dim: any) => {
+                            const scheduleValue = dim.schedule_designation || dim.schedule_number?.toString();
+                            const label = `${scheduleValue} (${dim.wall_thickness_mm}mm)`;
+                            return (
+                              <option key={dim.id} value={scheduleValue}>
+                                {label}
+                              </option>
+                            );
+                          })}
+                          {(!availableSchedulesMap[entry.id] || availableSchedulesMap[entry.id].length === 0) && (
+                            <option disabled>No schedules available - select nominal bore first</option>
+                          )}
                         </select>
                         <p className="mt-0.5 text-xs text-gray-700">
-                          Select a standard schedule. If the combination is not available in the database, you'll see an error when calculating.
+                          Select a schedule from available options for the selected nominal bore and steel specification.
                         </p>
                       </>
                     )}
@@ -1024,11 +1134,16 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                           console.warn('Could not get pipe end configuration details:', error);
                         }
                         
-                        onUpdateEntry(entry.id, {
+                        const updatedEntry: any = {
                           specs: { ...entry.specs, pipeEndConfiguration: newConfig },
                           // Store weld count information if available
                           ...(weldDetails && { weldInfo: weldDetails })
-                        });
+                        };
+                        
+                        // Auto-update description
+                        updatedEntry.description = generateItemDescription({ ...entry, ...updatedEntry });
+                        
+                        onUpdateEntry(entry.id, updatedEntry);
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                       required
@@ -1039,10 +1154,10 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                     </select>
                     <p className="mt-0.5 text-xs text-gray-700">
                       Select how the pipe ends should be configured
-                      {/* Show weld count information if available */}
-                      {(entry as any).weldInfo && (
+                      {/* Show weld count based on selected configuration */}
+                      {entry.specs.pipeEndConfiguration && (
                         <span className="ml-2 text-blue-600 font-medium">
-                          • {(entry as any).weldInfo.weldCount} welds per pipe
+                          • {getWeldCountPerPipe(entry.specs.pipeEndConfiguration)} weld{getWeldCountPerPipe(entry.specs.pipeEndConfiguration) !== 1 ? 's' : ''} per pipe
                         </span>
                       )}
                     </p>
@@ -1277,8 +1392,19 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                       <div className="bg-white p-2 rounded">
                         <div className="flex justify-between items-center">
                           <div>
-                            <p className="text-xs text-gray-700 font-medium">Flanges Required</p>
-                            <p className="text-lg font-bold text-gray-900">{entry.calculation.numberOfFlanges}</p>
+                            <p className="text-xs text-gray-700 font-medium">
+                              Flanges Required ({entry.specs.pipeEndConfiguration || 'PE'})
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {(() => {
+                                const flangesPerPipe = getFlangesPerPipe(entry.specs.pipeEndConfiguration || 'PE');
+                                const pipeCount = entry.calculation?.calculatedPipeCount || 0;
+                                return flangesPerPipe * pipeCount;
+                              })()}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              {getFlangesPerPipe(entry.specs.pipeEndConfiguration || 'PE')} flange{getFlangesPerPipe(entry.specs.pipeEndConfiguration || 'PE') !== 1 ? 's' : ''} per pipe × {entry.calculation?.calculatedPipeCount || 0} pipes
+                            </p>
                           </div>
                           <div className="text-right">
                             <p className="text-xs text-gray-700 font-medium">Flange Welds</p>
@@ -1306,16 +1432,16 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                       </div>
 
                       {/* Pipe End Configuration Welds */}
-                      {(entry as any).weldInfo && (
+                      {entry.specs.pipeEndConfiguration && (
                         <div className="bg-green-50 p-2 rounded">
                           <div className="flex justify-between items-center">
                             <div>
                               <p className="text-xs text-green-700 font-medium">Pipe End Config Welds</p>
                               <p className="text-lg font-bold text-green-900">
-                                {(entry as any).weldInfo.weldCount} per pipe
+                                {getWeldCountPerPipe(entry.specs.pipeEndConfiguration)} per pipe
                               </p>
                               <p className="text-xs text-green-600">
-                                Total: {(entry as any).weldInfo.weldCount * (entry.calculation?.calculatedPipeCount || 0)} welds
+                                Total: {getWeldCountPerPipe(entry.specs.pipeEndConfiguration) * (entry.calculation?.calculatedPipeCount || 0)} welds
                               </p>
                             </div>
                             <div className="text-right">
@@ -1324,7 +1450,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                                 {entry.specs.pipeEndConfiguration || 'PE'}
                               </p>
                               <p className="text-xs text-green-600">
-                                {(entry as any).weldInfo.description}
+                                {PIPE_END_OPTIONS.find(opt => opt.value === entry.specs.pipeEndConfiguration)?.label.split(' - ')[1] || ''}
                               </p>
                             </div>
                           </div>
@@ -1473,7 +1599,7 @@ function ReviewSubmitStep({ entries, rfqData, onSubmit, errors, loading }: any) 
               disabled={loading}
               className="px-8 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Submitting RFQ...' : '📨 Submit RFQ for Quotation'}
+              {loading ? 'Submitting RFQ...' : 'Submit RFQ for Quotation'}
             </button>
           </div>
           
@@ -1518,6 +1644,10 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isLoadingMasterData, setIsLoadingMasterData] = useState(true);
+  // Store available schedules per entry: { entryId: PipeDimension[] }
+  const [availableSchedulesMap, setAvailableSchedulesMap] = useState<Record<string, any[]>>({});
+  // Store available pressure classes for selected standard
+  const [availablePressureClasses, setAvailablePressureClasses] = useState<any[]>([]);
 
   // Load master data from API
   useEffect(() => {
@@ -1555,6 +1685,144 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
 
     loadMasterData();
   }, []);
+
+  // Helper function to recommend pressure class based on working pressure (in bar)
+  const getRecommendedPressureClass = (workingPressureBar: number, pressureClasses: any[]) => {
+    if (!workingPressureBar || !pressureClasses.length) return null;
+
+    // Extract numeric value from designation (e.g., "4000/3" -> 4000, "600/3" -> 600)
+    const classesWithRating = pressureClasses.map(pc => {
+      const match = pc.designation?.match(/^(\d+)/);
+      const rating = match ? parseInt(match[1]) : 0;
+      return { ...pc, rating };
+    }).filter(pc => pc.rating > 0);
+
+    if (classesWithRating.length === 0) return null;
+
+    // Sort by rating ascending
+    classesWithRating.sort((a, b) => a.rating - b.rating);
+
+    // Find the lowest rating that meets or exceeds the working pressure
+    // Assuming rating is in some standard unit, we need a rough conversion
+    // For SANS flanges: 600 = ~41 bar, 1000 = ~68 bar, 1600 = ~110 bar, 2500 = ~172 bar, 4000 = ~275 bar
+    // Simplified: rating / 14.5 ≈ bar (rough approximation)
+    const recommended = classesWithRating.find(pc => (pc.rating / 14.5) >= workingPressureBar);
+    
+    return recommended || classesWithRating[classesWithRating.length - 1]; // Return highest if none match
+  };
+
+  // Fetch available pressure classes for a standard and auto-select recommended
+  const fetchAndSelectPressureClass = async (standardId: number, workingPressureBar?: number) => {
+    try {
+      const { masterDataApi } = await import('@/app/lib/api/client');
+      const classes = await masterDataApi.getFlangePressureClassesByStandard(standardId);
+      setAvailablePressureClasses(classes);
+
+      // Auto-select recommended pressure class if working pressure is available
+      if (workingPressureBar && classes.length > 0) {
+        const recommended = getRecommendedPressureClass(workingPressureBar, classes);
+        if (recommended) {
+          return recommended.id;
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error fetching pressure classes:', error);
+      setAvailablePressureClasses([]);
+      return null;
+    }
+  };
+
+  // Fetch available schedules for a specific entry
+  const fetchAvailableSchedules = async (entryId: string, steelSpecId: number, nominalBoreMm: number) => {
+    try {
+      const { masterDataApi } = await import('@/app/lib/api/client');
+      
+      // Find the nominal outside diameter ID from nominalBoreMm
+      const nominalBore = masterData.nominalBores?.find(nb => nb.nominal_diameter_mm === nominalBoreMm);
+      if (!nominalBore) {
+        console.warn(`No nominal bore found for ${nominalBoreMm}mm`);
+        return;
+      }
+
+      const dimensions = await masterDataApi.getPipeDimensionsAll(steelSpecId, nominalBore.id);
+      
+      // Store in map
+      setAvailableSchedulesMap(prev => ({
+        ...prev,
+        [entryId]: dimensions
+      }));
+      
+      return dimensions;
+    } catch (error) {
+      console.error('Error fetching available schedules:', error);
+      setAvailableSchedulesMap(prev => ({
+        ...prev,
+        [entryId]: []
+      }));
+    }
+  };
+
+  // Refetch available schedules when global steel specification changes
+  useEffect(() => {
+    const steelSpecId = rfqData.globalSpecs?.steelSpecificationId;
+    if (!steelSpecId || !masterData.nominalBores?.length) return;
+
+    // Refetch schedules for all entries that have a nominal bore selected
+    rfqData.straightPipeEntries.forEach((entry: StraightPipeEntry) => {
+      if (entry.specs.nominalBoreMm) {
+        fetchAvailableSchedules(entry.id, steelSpecId, entry.specs.nominalBoreMm);
+      }
+    });
+  }, [rfqData.globalSpecs?.steelSpecificationId, masterData.nominalBores, rfqData.straightPipeEntries]);
+
+  // Auto-calculate when entry specifications change (with debounce)
+  useEffect(() => {
+    const calculateEntry = async (entry: StraightPipeEntry) => {
+      // Only auto-calculate if all required fields are present
+      const hasRequiredFields = 
+        entry.specs.nominalBoreMm &&
+        (entry.specs.scheduleNumber || entry.specs.wallThicknessMm) &&
+        entry.specs.individualPipeLength &&
+        entry.specs.quantityValue;
+
+      if (!hasRequiredFields) return;
+
+      try {
+        const { rfqApi } = await import('@/app/lib/api/client');
+        const result = await rfqApi.calculate(entry.specs);
+        updateEntryCalculation(entry.id, result);
+      } catch (error: any) {
+        console.error(`Auto-calculation error for entry ${entry.id}:`, error);
+        // Silently fail for auto-calculation - don't show alerts
+      }
+    };
+
+    // Debounce the calculation to avoid excessive API calls
+    const timeoutId = setTimeout(() => {
+      // Calculate all entries that have complete data
+      rfqData.straightPipeEntries.forEach((entry: StraightPipeEntry) => {
+        calculateEntry(entry);
+      });
+    }, 500); // 500ms debounce delay
+
+    return () => clearTimeout(timeoutId);
+  }, [
+    // Watch for changes in any entry's specs
+    JSON.stringify(rfqData.straightPipeEntries.map((e: StraightPipeEntry) => ({
+      id: e.id,
+      nominalBoreMm: e.specs.nominalBoreMm,
+      scheduleNumber: e.specs.scheduleNumber,
+      wallThicknessMm: e.specs.wallThicknessMm,
+      individualPipeLength: e.specs.individualPipeLength,
+      quantityValue: e.specs.quantityValue,
+      quantityType: e.specs.quantityType,
+      pipeEndConfiguration: e.specs.pipeEndConfiguration,
+      flangeStandardId: e.specs.flangeStandardId,
+      flangePressureClassId: e.specs.flangePressureClassId
+    })))
+  ]);
 
   // Enhanced next step function with validation
   const nextStep = () => {
@@ -1747,6 +2015,8 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
             onUpdateGlobalSpecs={updateGlobalSpecs}
             masterData={masterData}
             errors={validationErrors}
+            fetchAndSelectPressureClass={fetchAndSelectPressureClass}
+            availablePressureClasses={availablePressureClasses}
           />
         );
       case 3:
@@ -1761,6 +2031,8 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
             onCalculate={handleCalculateAll}
             errors={validationErrors}
             loading={false}
+            fetchAvailableSchedules={fetchAvailableSchedules}
+            availableSchedulesMap={availableSchedulesMap}
           />
         );
       case 4:

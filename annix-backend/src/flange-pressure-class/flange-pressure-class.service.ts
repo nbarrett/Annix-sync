@@ -44,4 +44,10 @@ export class FlangePressureClassService {
     const pressure = await this.findOne(id);
     await this.pressureRepo.remove(pressure);
   }
+
+  async getAllByStandard(standardId: number): Promise<FlangePressureClass[]> {
+    const standard = await this.standardRepo.findOne({ where: { id: standardId } });
+    if (!standard) throw new NotFoundException(`Flange standard ${standardId} not found`); 
+    return this.pressureRepo.find({ where: { standard: { id: standardId } } });
+  }
 }
