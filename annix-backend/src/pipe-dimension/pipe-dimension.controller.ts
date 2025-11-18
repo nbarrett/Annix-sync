@@ -117,5 +117,17 @@ export class PipeDimensionController {
   async remove(@Param('id', ParseIntPipe) id: number) {
     return this.pipeDimensionService.remove(id);
   }
+
+  @Get('all/:steelSpecId/:nominalId')
+  @ApiOperation({ summary: 'Get all possible schedule numbers and wall thickness for a given steel specification and nominal bore' })
+  @ApiResponse({ status: 200, description: 'List of pipe dimensions with schedules and wall thicknesses' })
+  @ApiResponse({ status: 404, description: 'No pipe dimensions found for the given steel specification and nominal bore' })
+  @ApiResponse({ status: 400, description: 'Invalid Steel Specification ID or Nominal Bore ID' })
+  async findAllBySpecAndNominal(
+    @Param('steelSpecId', ParseIntPipe) steelSpecId: number,
+    @Param('nominalId', ParseIntPipe) nominalId: number,
+  ) {
+    return this.pipeDimensionService.findAllBySpecAndNominal(steelSpecId, nominalId);
+  }
 }
 

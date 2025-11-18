@@ -321,6 +321,10 @@ class ApiClient {
     return this.request<FlangePressureClass[]>('/flange-pressure-class');
   }
 
+  async getFlangePressureClassesByStandard(standardId: number): Promise<FlangePressureClass[]> {
+    return this.request<FlangePressureClass[]>(`/flange-pressure-class/standard/${standardId}`);
+  }
+
   // Pipe data endpoints
   async getPipeDimensions(
     nominalBore?: number,
@@ -336,6 +340,14 @@ class ApiClient {
     
     const query = params.toString() ? `?${params.toString()}` : '';
     return this.request<PipeDimension[]>(`/pipe-dimensions${query}`);
+  }
+
+  /**
+   * Get all pipe-dimensions for a given steel specification and nominal outside diameter id.
+   * This calls the backend route: /pipe-dimensions/all/:steelSpecId/:nominalId
+   */
+  async getPipeDimensionsAll(steelSpecId: number, nominalId: number): Promise<PipeDimension[]> {
+    return this.request<PipeDimension[]>(`/pipe-dimensions/all/${steelSpecId}/${nominalId}`);
   }
 
   async getNominalBores(steelSpecId?: number): Promise<NominalOutsideDiameter[]> {
@@ -469,6 +481,7 @@ export const masterDataApi = {
   getSteelSpecifications: () => apiClient.getSteelSpecifications(),
   getFlangeStandards: () => apiClient.getFlangeStandards(),
   getFlangePressureClasses: () => apiClient.getFlangePressureClasses(),
+  getFlangePressureClassesByStandard: (standardId: number) => apiClient.getFlangePressureClassesByStandard(standardId),
   getPipeDimensions: (nominalBore?: number, steelSpecId?: number, minPressure?: number, temperature?: number) => 
     apiClient.getPipeDimensions(nominalBore, steelSpecId, minPressure, temperature),
   getNominalBores: (steelSpecId?: number) => apiClient.getNominalBores(steelSpecId),
@@ -478,6 +491,7 @@ export const masterDataApi = {
     apiClient.getHigherSchedules(nominalBore, currentWallThickness, workingPressure, temperature, steelSpecId),
   getPipeEndConfigurations: () => apiClient.getPipeEndConfigurations(),
   getPipeEndConfigurationByCode: (configCode: string) => apiClient.getPipeEndConfigurationByCode(configCode),
+  getPipeDimensionsAll: (steelSpecId: number, nominalId: number) => apiClient.getPipeDimensionsAll(steelSpecId, nominalId),
 
   // Bend calculations  
   calculateBendSpecifications: (params: any) => apiClient.calculateBendSpecifications(params),
