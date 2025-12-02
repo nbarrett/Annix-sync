@@ -304,64 +304,130 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
   };
 
   const steps = [
-    { number: 1, title: 'Project Details', completed: currentStep > 1 },
-    { number: 2, title: 'Global Specs', completed: currentStep > 2 },
-    { number: 3, title: 'Bend Items', completed: currentStep > 3 },
-    { number: 4, title: 'Review & Submit', completed: false },
+    { number: 1, title: 'Project Details', description: 'Basic project information', completed: currentStep > 1 },
+    { number: 2, title: 'Global Specs', description: 'Working conditions', completed: currentStep > 2 },
+    { number: 3, title: 'Bend Items', description: 'Bend specifications', completed: currentStep > 3 },
+    { number: 4, title: 'Review & Submit', description: 'Final review', completed: false },
   ];
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Bend RFQ</h1>
-        <p className="text-gray-600">Create an RFQ for pipeline bends and elbows</p>
-      </div>
-
-      {/* Progress Steps */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          {steps.map((step, index) => (
-            <div key={step.number} className="flex items-center">
-              {/* Step Circle */}
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  currentStep === step.number
-                    ? 'bg-blue-500 text-white'
-                    : step.completed
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-300 text-gray-600'
-                }`}
+    <div className="min-h-screen bg-gray-100">
+      <div className="flex h-screen">
+        {/* Vertical Side Navigation */}
+        <div className="w-72 bg-white border-r border-gray-200 flex flex-col">
+          {/* Header */}
+          <div className="px-5 py-4 border-b border-gray-200">
+            <div className="flex justify-between items-center">
+              <h1 className="text-lg font-bold text-gray-900">
+                Create Bend RFQ
+              </h1>
+              <button
+                onClick={onCancel}
+                className="text-gray-400 hover:text-gray-600 text-xl"
               >
-                {step.completed ? (
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                ) : (
-                  step.number
-                )}
-              </div>
-
-              {/* Step Title */}
-              <div className="ml-3 text-sm font-medium text-gray-900">
-                {step.title}
-              </div>
-
-              {/* Connector Line */}
-              {index < steps.length - 1 && (
-                <div
-                  className={`mx-4 h-px w-16 ${
-                    step.completed ? 'bg-green-500' : 'bg-gray-300'
-                  }`}
-                />
-              )}
+                ✕
+              </button>
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
 
-      {/* Form Content */}
-      <div className="bg-white rounded-lg border border-gray-300 p-8 min-h-[600px]">
+          {/* Vertical Progress Steps */}
+          <div className="flex-1 px-4 py-4 overflow-y-auto">
+            <nav className="space-y-2">
+              {steps.map((step) => (
+                <div
+                  key={step.number}
+                  className={`relative flex items-start p-3 rounded-lg transition-all ${
+                    step.number === currentStep
+                      ? 'bg-blue-50 border-2 border-blue-500'
+                      : step.completed
+                      ? 'bg-green-50 border-2 border-green-500'
+                      : 'bg-gray-50 border-2 border-gray-200'
+                  }`}
+                >
+                  {/* Step Number/Checkmark */}
+                  <div
+                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                      step.number === currentStep
+                        ? 'bg-blue-600 text-white'
+                        : step.completed
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-300 text-gray-600'
+                    }`}
+                  >
+                    {step.completed ? '✓' : step.number}
+                  </div>
+
+                  {/* Step Content */}
+                  <div className="ml-4 flex-1">
+                    <p
+                      className={`text-sm font-semibold ${
+                        step.number === currentStep
+                          ? 'text-blue-900'
+                          : step.completed
+                          ? 'text-green-900'
+                          : 'text-gray-600'
+                      }`}
+                    >
+                      {step.title}
+                    </p>
+                    <p
+                      className={`text-xs mt-0.5 ${
+                        step.number === currentStep
+                          ? 'text-blue-700'
+                          : step.completed
+                          ? 'text-green-700'
+                          : 'text-gray-500'
+                      }`}
+                    >
+                      {step.description}
+                    </p>
+                  </div>
+
+                  {/* Active Indicator */}
+                  {step.number === currentStep && (
+                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </nav>
+          </div>
+
+          {/* Navigation Buttons */}
+          <div className="px-4 py-3 border-t border-gray-200 space-y-2">
+            {currentStep < 4 ? (
+              <button
+                onClick={nextStep}
+                disabled={loading}
+                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm transition-colors"
+              >
+                Next Step →
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm transition-colors"
+              >
+                {loading ? 'Submitting...' : 'Submit RFQ'}
+              </button>
+            )}
+            <button
+              onClick={prevStep}
+              disabled={currentStep === 1 || loading}
+              className="w-full px-6 py-3 text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm transition-colors"
+            >
+              ← Previous Step
+            </button>
+          </div>
+        </div>
+
+        {/* Main Content Area - FULL WIDTH */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="px-6 py-5">
         {/* Step 1: Project Details */}
         {currentStep === 1 && (
           <div className="space-y-6">
@@ -969,48 +1035,9 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
             )}
           </div>
         )}
-      </div>
-
-      {/* Navigation */}
-      <div className="flex justify-between mt-8">
-        <div>
-          {currentStep > 1 && (
-            <button
-              onClick={prevStep}
-              disabled={loading}
-              className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              Previous
-            </button>
-          )}
-        </div>
-
-        <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            disabled={loading}
-            className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          
-          {currentStep < 4 ? (
-            <button
-              onClick={nextStep}
-              disabled={loading}
-              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              Next
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-            >
-              {loading ? 'Submitting...' : 'Submit Bend RFQ'}
-            </button>
-          )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

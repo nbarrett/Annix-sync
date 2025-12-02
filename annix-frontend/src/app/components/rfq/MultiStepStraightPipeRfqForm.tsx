@@ -523,7 +523,7 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
   );
 }
 
-function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdateEntry, onRemoveEntry, onCalculate, errors, loading, fetchAvailableSchedules, availableSchedulesMap }: any) {
+function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBendEntry, onUpdateEntry, onRemoveEntry, onCalculate, onCalculateBend, errors, loading, fetchAvailableSchedules, availableSchedulesMap }: any) {
   const [isCalculating, setIsCalculating] = useState(false);
 
   // Use nominal bores from master data, fallback to hardcoded values
@@ -575,6 +575,41 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
   };
 
   const generateItemDescription = (entry: any) => {
+    // Handle bend items
+    if (entry.itemType === 'bend') {
+      const nb = entry.specs?.nominalBoreMm || 'XX';
+      const schedule = entry.specs?.scheduleNumber || 'XX';
+      const bendType = entry.specs?.bendType || 'X.XD';
+      const bendAngle = entry.specs?.bendDegrees || 'XX';
+      const pressure = globalSpecs?.workingPressureBar || entry.specs?.workingPressureBar || 'XX';
+      
+      // Get steel spec name if available
+      const steelSpec = entry.specs?.steelSpecificationId 
+        ? masterData.steelSpecs.find((s: any) => s.id === entry.specs.steelSpecificationId)?.steelSpecName
+        : globalSpecs?.steelSpecificationId
+          ? masterData.steelSpecs.find((s: any) => s.id === globalSpecs.steelSpecificationId)?.steelSpecName
+          : undefined;
+      
+      let description = `${nb}NB Sch${schedule} ${bendAngle}° ${bendType} Bend for ${pressure} Bar Pipeline`;
+      
+      // Add tangent/stub info if present
+      const numTangents = entry.specs?.numberOfTangents || 0;
+      const numStubs = entry.specs?.numberOfStubs || 0;
+      if (numTangents > 0 || numStubs > 0) {
+        const parts = [];
+        if (numTangents > 0) parts.push(`${numTangents} Tangent${numTangents > 1 ? 's' : ''}`);
+        if (numStubs > 0) parts.push(`${numStubs} Stub${numStubs > 1 ? 's' : ''}`);
+        description += ` with ${parts.join(' & ')}`;
+      }
+      
+      if (steelSpec) {
+        description += ` - ${steelSpec}`;
+      }
+      
+      return description;
+    }
+    
+    // Handle straight pipe items
     const nb = entry.specs.nominalBoreMm || 'XX';
     let schedule = entry.specs.scheduleNumber || (entry.specs.wallThicknessMm ? `${entry.specs.wallThicknessMm}WT` : 'XX');
     const pressure = globalSpecs?.workingPressureBar || entry.specs.workingPressureBar || 'XX';
@@ -710,25 +745,45 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Item Upload</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Items</h2>
         <div className="flex gap-3">
-          {/* Invalid schedules warning removed - all standard schedules now supported
-          {hasInvalidSchedules && (
+          {/* Add Item Dropdown */}
+          <div className="relative inline-block">
             <button
-              onClick={fixInvalidSchedules}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold text-sm"
-              title="Some items have invalid schedules (Sch10, Sch20, etc.) that may not exist in the database"
+              onClick={(e) => {
+                const menu = e.currentTarget.nextElementSibling;
+                menu?.classList.toggle('hidden');
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold inline-flex items-center gap-2"
             >
-              ⚠️ Fix Invalid Schedules
+              + Add Item
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
-          )}
-          */}
-          <button
-            onClick={() => onAddEntry()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
-          >
-            + Add Another Item
-          </button>
+            <div className="hidden absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+              <button
+                onClick={() => {
+                  onAddEntry();
+                  document.querySelector('.hidden')?.classList.add('hidden');
+                }}
+                className="w-full text-left px-4 py-3 hover:bg-blue-50 rounded-t-lg transition-colors border-b border-gray-100"
+              >
+                <div className="font-semibold text-blue-900">📏 Straight Pipe</div>
+                <div className="text-xs text-gray-600 mt-0.5">Standard pipeline sections</div>
+              </button>
+              <button
+                onClick={() => {
+                  onAddBendEntry();
+                  document.querySelector('.hidden')?.classList.add('hidden');
+                }}
+                className="w-full text-left px-4 py-3 hover:bg-purple-50 rounded-b-lg transition-colors"
+              >
+                <div className="font-semibold text-purple-900">🔄 Bend Section</div>
+                <div className="text-xs text-gray-600 mt-0.5">Elbows and custom bends</div>
+              </button>
+            </div>
+          </div>
           <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
             <span className="text-green-700 font-semibold">✓ Auto-calculating</span>
             <span className="text-xs text-green-600">Results update automatically</span>
@@ -737,10 +792,15 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
       </div>
 
       <div className="space-y-6">
-        {entries.map((entry: StraightPipeEntry, index: number) => (
-          <div key={entry.id} className="border border-gray-200 rounded-md p-3 bg-white">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-base font-semibold text-gray-800">Item #{index + 1}</h3>
+        {entries.map((entry: any, index: number) => (
+          <div key={entry.id} className="border-2 border-gray-200 rounded-lg p-5 bg-white shadow-sm">
+            <div className="flex justify-between items-center mb-3">
+              <div className="flex items-center gap-3">
+                <h3 className="text-base font-semibold text-gray-800">Item #{index + 1}</h3>
+                <span className={`px-3 py-1 ${entry.itemType === 'bend' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'} text-xs font-semibold rounded-full`}>
+                  {entry.itemType === 'bend' ? '🔄 Bend Section' : '📏 Straight Pipe'}
+                </span>
+              </div>
               {entries.length > 1 && (
                 <button
                   onClick={() => onRemoveEntry(entry.id)}
@@ -751,58 +811,631 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
               )}
             </div>
 
-            <div className="space-y-3">
-              {/* Item Description - Editable with Auto-generation */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-900 mb-1">
-                  Item Description *
-                </label>
-                <textarea
-                  value={entry.description || generateItemDescription(entry)}
-                  onChange={(e) => onUpdateEntry(entry.id, { description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  rows={2}
-                  placeholder="Enter item description..."
-                  required
-                />
-                <div className="flex justify-between items-center mt-0.5">
-                  <p className="text-xs text-gray-700">
-                    Edit the description or use the auto-generated one
-                  </p>
-                  {entry.description && entry.description !== generateItemDescription(entry) && (
-                    <button
-                      type="button"
-                      onClick={() => onUpdateEntry(entry.id, { description: generateItemDescription(entry) })}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+            {entry.itemType === 'bend' ? (
+              /* Bend Item Fields */
+              <div className="space-y-5">
+                {/* Item Description */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-900 mb-1">
+                    Item Description *
+                  </label>
+                  <textarea
+                    value={entry.description || ''}
+                    onChange={(e) => onUpdateEntry(entry.id, { description: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
+                    rows={2}
+                    placeholder="e.g., 40NB 90° 1.5D Bend"
+                    required
+                  />
+                </div>
+
+                {/* Bend Specifications Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-900 mb-1">
+                      Nominal Bore (mm) *
+                    </label>
+                    <select
+                      value={entry.specs?.nominalBoreMm || ''}
+                      onChange={async (e) => {
+                        const nominalBore = parseInt(e.target.value);
+                        const updatedEntry = {
+                          ...entry,
+                          specs: { ...entry.specs, nominalBoreMm: nominalBore }
+                        };
+                        // Auto-update description
+                        updatedEntry.description = generateItemDescription(updatedEntry);
+                        onUpdateEntry(entry.id, updatedEntry);
+                        // Auto-calculate if all required fields are filled
+                        if (nominalBore && entry.specs?.scheduleNumber && entry.specs?.bendType && entry.specs?.bendDegrees) {
+                          setTimeout(() => onCalculateBend && onCalculateBend(entry.id), 100);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
                     >
-                      Reset to Auto-generated
-                    </button>
+                      <option value="">Select NB</option>
+                      <option value="40">40 NB</option>
+                      <option value="50">50 NB</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-900 mb-1">
+                      Schedule *
+                    </label>
+                    <select
+                      value={entry.specs?.scheduleNumber || ''}
+                      onChange={(e) => {
+                        const schedule = e.target.value;
+                        const updatedEntry = {
+                          ...entry,
+                          specs: { ...entry.specs, scheduleNumber: schedule }
+                        };
+                        // Auto-update description
+                        updatedEntry.description = generateItemDescription(updatedEntry);
+                        onUpdateEntry(entry.id, updatedEntry);
+                        // Auto-calculate if all required fields are filled
+                        if (schedule && entry.specs?.nominalBoreMm && entry.specs?.bendType && entry.specs?.bendDegrees) {
+                          setTimeout(() => onCalculateBend && onCalculateBend(entry.id), 100);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
+                    >
+                      <option value="">Select Schedule</option>
+                      <option value="10">Sch 10</option>
+                      <option value="40">Sch 40</option>
+                      <option value="80">Sch 80</option>
+                      <option value="160">Sch 160</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-900 mb-1">
+                      Bend Type *
+                    </label>
+                    <select
+                      value={entry.specs?.bendType || ''}
+                      onChange={(e) => {
+                        const bendType = e.target.value;
+                        const updatedEntry = {
+                          ...entry,
+                          specs: { ...entry.specs, bendType: bendType }
+                        };
+                        // Auto-update description
+                        updatedEntry.description = generateItemDescription(updatedEntry);
+                        onUpdateEntry(entry.id, updatedEntry);
+                        // Auto-calculate if all required fields are filled
+                        if (bendType && entry.specs?.nominalBoreMm && entry.specs?.scheduleNumber && entry.specs?.bendDegrees) {
+                          setTimeout(() => onCalculateBend && onCalculateBend(entry.id), 100);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
+                    >
+                      <option value="">Select Bend Type</option>
+                      <option value="1.5D">1.5D</option>
+                      <option value="2D">2D</option>
+                      <option value="3D">3D</option>
+                      <option value="5D">5D</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-900 mb-1">
+                      Bend Angle (degrees) *
+                    </label>
+                    <select
+                      value={entry.specs?.bendDegrees || ''}
+                      onChange={(e) => {
+                        const bendDegrees = parseFloat(e.target.value);
+                        const updatedEntry = {
+                          ...entry,
+                          specs: { ...entry.specs, bendDegrees: bendDegrees }
+                        };
+                        // Auto-update description
+                        updatedEntry.description = generateItemDescription(updatedEntry);
+                        onUpdateEntry(entry.id, updatedEntry);
+                        // Auto-calculate if all required fields are filled
+                        if (bendDegrees && entry.specs?.nominalBoreMm && entry.specs?.scheduleNumber && entry.specs?.bendType) {
+                          setTimeout(() => onCalculateBend && onCalculateBend(entry.id), 100);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
+                    >
+                      <option value="">Select Angle</option>
+                      <option value="11.25">11.25°</option>
+                      <option value="22.5">22.5°</option>
+                      <option value="30">30°</option>
+                      <option value="45">45°</option>
+                      <option value="60">60°</option>
+                      <option value="90">90°</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-900 mb-1">
+                      Center-to-Face (mm)
+                    </label>
+                    <input
+                      type="text"
+                      value={entry.calculation?.centerToFaceDimension?.toFixed(1) || 'Calculate to see'}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-600 cursor-not-allowed"
+                      placeholder="Auto-calculated"
+                    />
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      Auto-populated based on NB and angle
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-900 mb-1">
+                      Quantity *
+                    </label>
+                    <input
+                      type="number"
+                      value={entry.specs?.quantityValue || ''}
+                      onChange={(e) => {
+                        const quantity = parseInt(e.target.value) || 1;
+                        onUpdateEntry(entry.id, {
+                          specs: { ...entry.specs, quantityValue: quantity }
+                        });
+                        // Auto-calculate if all required fields are filled
+                        if (entry.specs?.nominalBoreMm && entry.specs?.scheduleNumber && entry.specs?.bendType && entry.specs?.bendDegrees) {
+                          setTimeout(() => onCalculateBend && onCalculateBend(entry.id), 100);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
+                      min="1"
+                      placeholder="1"
+                    />
+                  </div>
+                </div>
+
+                {/* Tangents Section */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-900 mb-1">
+                        Number of Tangents
+                      </label>
+                      <select
+                        value={entry.specs?.numberOfTangents || 0}
+                        onChange={(e) => {
+                          const count = parseInt(e.target.value) || 0;
+                          const currentLengths = entry.specs?.tangentLengths || [];
+                          const newLengths = count === 0 ? [] : 
+                                           count === 1 ? [currentLengths[0] || 150] :
+                                           [currentLengths[0] || 150, currentLengths[1] || 150];
+                          const updatedEntry = {
+                            ...entry,
+                            specs: { 
+                              ...entry.specs, 
+                              numberOfTangents: count,
+                              tangentLengths: newLengths
+                            }
+                          };
+                          // Auto-update description
+                          updatedEntry.description = generateItemDescription(updatedEntry);
+                          onUpdateEntry(entry.id, updatedEntry);
+                          // Auto-calculate if all required fields are filled
+                          if (entry.specs?.nominalBoreMm && entry.specs?.scheduleNumber && entry.specs?.bendType && entry.specs?.bendDegrees) {
+                            setTimeout(() => onCalculateBend && onCalculateBend(entry.id), 100);
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
+                      >
+                        <option value="0">0 - No Tangents</option>
+                        <option value="1">1 - Single Tangent</option>
+                        <option value="2">2 - Both Tangents</option>
+                      </select>
+                    </div>
+
+                    {(entry.specs?.numberOfTangents || 0) >= 1 && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-900 mb-1">
+                          Tangent 1 Length (mm)
+                        </label>
+                        <input
+                          type="number"
+                          value={entry.specs?.tangentLengths?.[0] || ''}
+                          onChange={(e) => {
+                            const lengths = [...(entry.specs?.tangentLengths || [])];
+                            lengths[0] = parseInt(e.target.value) || 0;
+                            onUpdateEntry(entry.id, {
+                              specs: { ...entry.specs, tangentLengths: lengths }
+                            });
+                            // Auto-calculate if all required fields are filled
+                            if (entry.specs?.nominalBoreMm && entry.specs?.scheduleNumber && entry.specs?.bendType && entry.specs?.bendDegrees) {
+                              setTimeout(() => onCalculateBend && onCalculateBend(entry.id), 100);
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
+                          min="0"
+                          placeholder="150"
+                        />
+                      </div>
+                    )}
+
+                    {(entry.specs?.numberOfTangents || 0) >= 2 && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-900 mb-1">
+                          Tangent 2 Length (mm)
+                        </label>
+                        <input
+                          type="number"
+                          value={entry.specs?.tangentLengths?.[1] || ''}
+                          onChange={(e) => {
+                            const lengths = [...(entry.specs?.tangentLengths || [])];
+                            lengths[1] = parseInt(e.target.value) || 0;
+                            onUpdateEntry(entry.id, {
+                              specs: { ...entry.specs, tangentLengths: lengths }
+                            });
+                            // Auto-calculate if all required fields are filled
+                            if (entry.specs?.nominalBoreMm && entry.specs?.scheduleNumber && entry.specs?.bendType && entry.specs?.bendDegrees) {
+                              setTimeout(() => onCalculateBend && onCalculateBend(entry.id), 100);
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
+                          min="0"
+                          placeholder="150"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Stubs Section */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="mb-3">
+                    <label className="block text-xs font-semibold text-gray-900 mb-1">
+                      Number of Stubs
+                    </label>
+                    <select
+                      value={entry.specs?.numberOfStubs || 0}
+                      onChange={(e) => {
+                        const count = parseInt(e.target.value) || 0;
+                        const currentStubs = entry.specs?.stubs || [];
+                        const newStubs = count === 0 ? [] :
+                                        count === 1 ? [currentStubs[0] || { nominalBoreMm: 40, length: 150, flangeSpec: '' }] :
+                                        [
+                                          currentStubs[0] || { nominalBoreMm: 40, length: 150, flangeSpec: '' },
+                                          currentStubs[1] || { nominalBoreMm: 40, length: 150, flangeSpec: '' }
+                                        ];
+                        const updatedEntry = {
+                          ...entry,
+                          specs: { 
+                            ...entry.specs, 
+                            numberOfStubs: count,
+                            stubs: newStubs
+                          }
+                        };
+                        // Auto-update description
+                        updatedEntry.description = generateItemDescription(updatedEntry);
+                        onUpdateEntry(entry.id, updatedEntry);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500 text-gray-900"
+                    >
+                      <option value="0">0 - No Stubs</option>
+                      <option value="1">1 - Single Stub</option>
+                      <option value="2">2 - Both Stubs</option>
+                    </select>
+                  </div>
+
+                  {(entry.specs?.numberOfStubs || 0) >= 1 && (
+                    <div className="mb-3 p-3 bg-white rounded-lg border border-green-300">
+                      <h5 className="text-xs font-bold text-green-900 mb-2">Stub 1 Specifications</h5>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">NB (mm)</label>
+                          <input
+                            type="number"
+                            value={entry.specs?.stubs?.[0]?.nominalBoreMm || ''}
+                            onChange={(e) => {
+                              const stubs = [...(entry.specs?.stubs || [])];
+                              stubs[0] = { ...stubs[0], nominalBoreMm: parseInt(e.target.value) || 0 };
+                              onUpdateEntry(entry.id, {
+                                specs: { ...entry.specs, stubs }
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500 text-gray-900"
+                            placeholder="40"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Length (mm)</label>
+                          <input
+                            type="number"
+                            value={entry.specs?.stubs?.[0]?.length || ''}
+                            onChange={(e) => {
+                              const stubs = [...(entry.specs?.stubs || [])];
+                              stubs[0] = { ...stubs[0], length: parseInt(e.target.value) || 0 };
+                              onUpdateEntry(entry.id, {
+                                specs: { ...entry.specs, stubs }
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500 text-gray-900"
+                            placeholder="150"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Flange Spec</label>
+                          <input
+                            type="text"
+                            value={entry.specs?.stubs?.[0]?.flangeSpec || ''}
+                            onChange={(e) => {
+                              const stubs = [...(entry.specs?.stubs || [])];
+                              stubs[0] = { ...stubs[0], flangeSpec: e.target.value };
+                              onUpdateEntry(entry.id, {
+                                specs: { ...entry.specs, stubs }
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500 text-gray-900"
+                            placeholder="e.g., ASME 150#"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {(entry.specs?.numberOfStubs || 0) >= 2 && (
+                    <div className="p-3 bg-white rounded-lg border border-green-300">
+                      <h5 className="text-xs font-bold text-green-900 mb-2">Stub 2 Specifications</h5>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">NB (mm)</label>
+                          <input
+                            type="number"
+                            value={entry.specs?.stubs?.[1]?.nominalBoreMm || ''}
+                            onChange={(e) => {
+                              const stubs = [...(entry.specs?.stubs || [])];
+                              stubs[1] = { ...stubs[1], nominalBoreMm: parseInt(e.target.value) || 0 };
+                              onUpdateEntry(entry.id, {
+                                specs: { ...entry.specs, stubs }
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500 text-gray-900"
+                            placeholder="40"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Length (mm)</label>
+                          <input
+                            type="number"
+                            value={entry.specs?.stubs?.[1]?.length || ''}
+                            onChange={(e) => {
+                              const stubs = [...(entry.specs?.stubs || [])];
+                              stubs[1] = { ...stubs[1], length: parseInt(e.target.value) || 0 };
+                              onUpdateEntry(entry.id, {
+                                specs: { ...entry.specs, stubs }
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500 text-gray-900"
+                            placeholder="150"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Flange Spec</label>
+                          <input
+                            type="text"
+                            value={entry.specs?.stubs?.[1]?.flangeSpec || ''}
+                            onChange={(e) => {
+                              const stubs = [...(entry.specs?.stubs || [])];
+                              stubs[1] = { ...stubs[1], flangeSpec: e.target.value };
+                              onUpdateEntry(entry.id, {
+                                specs: { ...entry.specs, stubs }
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500 text-gray-900"
+                            placeholder="e.g., ASME 150#"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
 
-              {/* Client Item Number */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-900 mb-1">
-                  Client Item Number
-                </label>
-                <input
-                  type="text"
-                  value={entry.clientItemNumber || ''}
-                  onChange={(e) => onUpdateEntry(entry.id, { clientItemNumber: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  placeholder="Auto-generated from customer name (e.g., PLS-0001)"
-                />
-                <p className="mt-0.5 text-xs text-gray-700">
-                  3 letters from customer name + 4 digits (auto-generated, can be overridden)
-                </p>
-              </div>
+                {/* Flange Type Selection */}
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h5 className="text-sm font-bold text-orange-900 mb-3">Flange Specifications</h5>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-900 mb-1">
+                        Flange Standard
+                      </label>
+                      <select
+                        value={entry.specs?.flangeStandardId || globalSpecs?.flangeStandardId || ''}
+                        onChange={(e) => onUpdateEntry(entry.id, {
+                          specs: { ...entry.specs, flangeStandardId: parseInt(e.target.value) || undefined }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 text-gray-900"
+                      >
+                        <option value="">Select Standard</option>
+                        {masterData.flangeStandards?.map((standard: any) => (
+                          <option key={standard.id} value={standard.id}>
+                            {standard.code}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Left Column - Item Specifications */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-900 mb-1">
+                        Pressure Class
+                      </label>
+                      <select
+                        value={entry.specs?.flangePressureClassId || globalSpecs?.flangePressureClassId || ''}
+                        onChange={(e) => onUpdateEntry(entry.id, {
+                          specs: { ...entry.specs, flangePressureClassId: parseInt(e.target.value) || undefined }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 text-gray-900"
+                      >
+                        <option value="">Select Class</option>
+                        {masterData.pressureClasses?.map((pressureClass: any) => (
+                          <option key={pressureClass.id} value={pressureClass.id}>
+                            {pressureClass.designation}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-900 mb-1">
+                        Use Global Specs
+                      </label>
+                      <div className="flex items-center h-10">
+                        <input
+                          type="checkbox"
+                          checked={entry.specs?.useGlobalFlangeSpecs ?? true}
+                          onChange={(e) => onUpdateEntry(entry.id, {
+                            specs: { ...entry.specs, useGlobalFlangeSpecs: e.target.checked }
+                          })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                        />
+                        <label className="ml-2 text-sm text-gray-700">
+                          Use global flange specifications
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Working Conditions */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-900 mb-1">
+                      Working Pressure (bar)
+                    </label>
+                    <input
+                      type="number"
+                      value={entry.specs?.workingPressureBar || globalSpecs?.workingPressureBar || ''}
+                      onChange={(e) => onUpdateEntry(entry.id, {
+                        specs: { ...entry.specs, workingPressureBar: parseFloat(e.target.value) || 10 }
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
+                      placeholder="e.g., 16"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-900 mb-1">
+                      Working Temperature (°C)
+                    </label>
+                    <input
+                      type="number"
+                      value={entry.specs?.workingTemperatureC || globalSpecs?.workingTemperatureC || ''}
+                      onChange={(e) => onUpdateEntry(entry.id, {
+                        specs: { ...entry.specs, workingTemperatureC: parseFloat(e.target.value) || 20 }
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
+                      placeholder="e.g., 120"
+                    />
+                  </div>
+                </div>
+
+                {/* Auto-Calculating Indicator */}
+                <div className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-50 border border-purple-200 rounded-lg">
+                  <span className="text-purple-700 font-semibold">✓ Auto-calculating</span>
+                  <span className="text-xs text-purple-600">Results update automatically</span>
+                </div>
+
+                {/* Calculation Results */}
+                {entry.calculation && (
+                  <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                    <h4 className="font-medium text-purple-900 mb-3">Calculation Results:</h4>
+                    
+                    {/* Main metrics */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-purple-500">
+                        <div className="text-xs text-gray-500 uppercase tracking-wide font-medium">Total Weight</div>
+                        <div className="text-2xl font-bold text-gray-900 mt-1">{entry.calculation.totalWeight?.toFixed(1)} kg</div>
+                      </div>
+                      <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
+                        <div className="text-xs text-gray-500 uppercase tracking-wide font-medium">Center-to-Face</div>
+                        <div className="text-2xl font-bold text-gray-900 mt-1">{entry.calculation.centerToFaceDimension?.toFixed(1)} mm</div>
+                      </div>
+                    </div>
+
+                    {/* Weight breakdown */}
+                    <div className="bg-white p-4 rounded-lg shadow-sm mb-4">
+                      <h5 className="text-sm font-medium text-gray-700 mb-3">Weight Breakdown:</h5>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                          <span className="text-sm text-gray-600">Bend:</span>
+                          <span className="font-medium text-gray-900">{entry.calculation.bendWeight?.toFixed(1) || '0'} kg</span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                          <span className="text-sm text-gray-600">Tangent:</span>
+                          <span className="font-medium text-gray-900">{entry.calculation.tangentWeight?.toFixed(1) || '0'} kg</span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                          <span className="text-sm text-gray-600">Flange:</span>
+                          <span className="font-medium text-gray-900">{entry.calculation.flangeWeight?.toFixed(1) || '0'} kg</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Technical details */}
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                      <h5 className="text-sm font-medium text-gray-700 mb-3">Technical Details:</h5>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="flex flex-col">
+                          <span className="text-xs text-gray-500 uppercase tracking-wide">Outside Diameter</span>
+                          <span className="font-medium text-gray-900">{entry.calculation.outsideDiameterMm?.toFixed(1) || '0'} mm</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs text-gray-500 uppercase tracking-wide">Wall Thickness</span>
+                          <span className="font-medium text-gray-900">{entry.calculation.wallThicknessMm?.toFixed(2) || '0'} mm</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs text-gray-500 uppercase tracking-wide">Flanges</span>
+                          <span className="font-medium text-gray-900">{entry.calculation.numberOfFlanges || 0}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs text-gray-500 uppercase tracking-wide">Weld Length</span>
+                          <span className="font-medium text-gray-900">{((entry.calculation.totalFlangeWeldLength || 0) + (entry.calculation.totalButtWeldLength || 0)).toFixed(2)} m</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Straight Pipe Fields */
+              <div className="space-y-5">
+                {/* Item Description - Single Field */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-900 mb-1">
+                    Item Description *
+                  </label>
+                  <textarea
+                    value={entry.description || generateItemDescription(entry)}
+                    onChange={(e) => onUpdateEntry(entry.id, { description: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                    rows={2}
+                    placeholder="Enter item description..."
+                    required
+                  />
+                  <div className="flex justify-between items-center mt-0.5">
+                    <p className="text-xs text-gray-500">
+                      Edit the description or use the auto-generated one
+                    </p>
+                    {entry.description && entry.description !== generateItemDescription(entry) && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdateEntry(entry.id, { description: generateItemDescription(entry) })}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Reset to Auto-generated
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Column 1 - Specifications */}
                 <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-1">
-                    Item Specifications
+                  <h4 className="text-sm font-bold text-gray-900 border-b border-blue-500 pb-1.5">
+                    📋 Pipe Specifications
                   </h4>
 
                   {/* Nominal Bore */}
@@ -1110,10 +1743,10 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                   </div>
                 </div>
 
-                {/* Right Column - Quantities */}
+                {/* Column 2 - Quantities & Configurations */}
                 <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-1">
-                    Quantities & Calculations
+                  <h4 className="text-base font-bold text-gray-900 border-b-2 border-green-500 pb-2 mb-4">
+                    ⚙️ Quantities & Configuration
                   </h4>
 
                   {/* Pipe End Configuration - NEW FIELD */}
@@ -1217,18 +1850,70 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                     </p>
                   </div>
 
-                  {/* Flange Information */}
+                  {/* Flange Specifications */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-900 mb-1">
-                      Flanges
-                      {globalSpecs?.flangeStandardId ? (
-                        <span className="text-green-600 text-xs ml-2">(From Global Specs)</span>
-                      ) : (
-                        <span className="text-orange-600 text-xs ml-2">(Item Specific)</span>
+                    <div className="flex justify-between items-start mb-2">
+                      <label className="block text-xs font-semibold text-gray-900">
+                        Flanges
+                        {entry.hasFlangeOverride ? (
+                          <span className="text-blue-600 text-xs ml-2">(Override Active)</span>
+                        ) : globalSpecs?.flangeStandardId ? (
+                          <span className="text-green-600 text-xs ml-2">(From Global Specs)</span>
+                        ) : (
+                          <span className="text-orange-600 text-xs ml-2">(Item Specific)</span>
+                        )}
+                      </label>
+                      {globalSpecs?.flangeStandardId && (
+                        <label className="flex items-center gap-1 text-xs text-gray-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={entry.hasFlangeOverride || false}
+                            onChange={(e) => {
+                              const override = e.target.checked;
+                              onUpdateEntry(entry.id, {
+                                hasFlangeOverride: override,
+                                specs: override ? entry.specs : {
+                                  ...entry.specs,
+                                  flangeStandardId: undefined,
+                                  flangePressureClassId: undefined
+                                }
+                              });
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="font-medium">Override</span>
+                        </label>
                       )}
-                    </label>
+                    </div>
+
+                    {/* Warning if deviating from recommended pressure class */}
+                    {(() => {
+                      const currentClassId = entry.specs.flangePressureClassId || globalSpecs?.flangePressureClassId;
+                      const recommendedClassId = globalSpecs?.flangePressureClassId;
+                      const isOverride = entry.hasFlangeOverride && currentClassId && recommendedClassId && currentClassId !== recommendedClassId;
+                      
+                      if (isOverride) {
+                        const currentClass = masterData.pressureClasses?.find((p: any) => p.id === currentClassId);
+                        const recommendedClass = masterData.pressureClasses?.find((p: any) => p.id === recommendedClassId);
+                        return (
+                          <div className="bg-red-50 border-2 border-red-400 rounded-lg p-2 mb-2">
+                            <div className="flex items-start gap-2">
+                              <span className="text-red-600 text-base">⚠️</span>
+                              <div className="flex-1">
+                                <p className="text-xs font-bold text-red-900">Pressure Rating Override</p>
+                                <p className="text-xs text-red-700 mt-0.5">
+                                  Selected <span className="font-semibold">{currentClass?.designation}</span> instead of recommended{' '}
+                                  <span className="font-semibold">{recommendedClass?.designation}</span>
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     
-                    {globalSpecs?.flangeStandardId ? (
+                    {globalSpecs?.flangeStandardId && !entry.hasFlangeOverride ? (
                       <div className="bg-green-50 p-2 rounded-md space-y-2">
                         <p className="text-green-800 text-xs">
                           Using global flange standard from specifications page
@@ -1236,7 +1921,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                         {/* Display recommended flange specification */}
                         {globalSpecs?.flangePressureClassId && (
                           <div className="bg-blue-50 p-2 rounded border-l-2 border-blue-300">
-                            <p className="text-blue-800 text-sm font-semibold">
+                            <p className="text-blue-800 text-xs font-semibold">
                               📋 Recommended Flange Spec: 
                               <span className="ml-1">
                                 {(() => {
@@ -1265,7 +1950,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                     ) : (
                       <div className="space-y-2">
                         <select
-                          value={entry.specs.flangeStandardId || ''}
+                          value={entry.specs.flangeStandardId || globalSpecs?.flangeStandardId || ''}
                           onChange={(e) => onUpdateEntry(entry.id, { 
                             specs: { ...entry.specs, flangeStandardId: e.target.value ? Number(e.target.value) : undefined }
                           })}
@@ -1280,7 +1965,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                         </select>
                         
                         <select
-                          value={entry.specs.flangePressureClassId || ''}
+                          value={entry.specs.flangePressureClassId || globalSpecs?.flangePressureClassId || ''}
                           onChange={(e) => onUpdateEntry(entry.id, { 
                             specs: { ...entry.specs, flangePressureClassId: e.target.value ? Number(e.target.value) : undefined }
                           })}
@@ -1337,11 +2022,19 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                     )}
                   </div>
 
+                </div>
+
+                {/* Column 3 - Calculation Results & Weights */}
+                <div className="space-y-3">
+                  <h4 className="text-base font-bold text-gray-900 border-b-2 border-purple-500 pb-2 mb-4">
+                    📊 Calculation Results
+                  </h4>
+
                   {/* Calculation Results */}
-                  {entry.calculation && (
+                  {entry.calculation ? (
                     <div className="bg-blue-50 border border-blue-200 p-3 rounded-md space-y-2">
                       <h5 className="text-sm font-semibold text-blue-900 mb-2 border-b border-blue-200 pb-1">
-                        📊 Calculated Results
+                        📊 Auto-Calculated Results
                       </h5>
                       
                       {/* Pipe Quantities */}
@@ -1462,10 +2155,22 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
                         💡 Based on {entry.specs.individualPipeLength}m pipe lengths with {entry.specs.pipeEndConfiguration || 'PE'} configuration
                       </p>
                     </div>
+                  ) : (
+                    <div className="bg-gray-50 border border-gray-200 p-4 rounded-md text-center">
+                      <p className="text-sm text-gray-600">
+                        🔄 Fill in pipe specifications to see calculated results
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Results will appear automatically as you enter details
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
+
+
             </div>
+            )}
           </div>
         ))}
 
@@ -1497,15 +2202,27 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onUpdate
 }
 
 function ReviewSubmitStep({ entries, rfqData, onSubmit, errors, loading }: any) {
+  // Use unified items array that includes both straight pipes and bends
+  const allItems = rfqData.items || entries || [];
+  
   const getTotalWeight = () => {
-    return entries.reduce((total: number, entry: StraightPipeEntry) => {
-      return total + (entry.calculation?.totalSystemWeight || 0);
+    return allItems.reduce((total: number, entry: any) => {
+      // Bends use totalWeight, straight pipes use totalSystemWeight
+      const weight = entry.itemType === 'bend' 
+        ? (entry.calculation?.totalWeight || 0)
+        : (entry.calculation?.totalSystemWeight || 0);
+      return total + weight;
     }, 0);
   };
 
   const getTotalLength = () => {
-    return entries.reduce((total: number, entry: StraightPipeEntry) => {
-      return total + entry.specs.quantityValue;
+    return allItems.reduce((total: number, entry: any) => {
+      // For bends, we don't have a total length concept, just count quantity
+      // For straight pipes, use quantityValue (meters)
+      if (entry.itemType === 'bend') {
+        return total; // Bends don't add to total pipeline length
+      }
+      return total + (entry.specs.quantityValue || 0);
     }, 0);
   };
 
@@ -1543,28 +2260,52 @@ function ReviewSubmitStep({ entries, rfqData, onSubmit, errors, loading }: any) 
           )}
         </div>
 
-        {/* Pipe Entries Summary */}
+        {/* All Items Summary */}
         <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Straight Pipe Requirements</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Item Requirements</h3>
           <div className="space-y-4">
-            {entries.map((entry: StraightPipeEntry, index: number) => (
-              <div key={entry.id} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
+            {allItems.map((entry: any, index: number) => (
+              <div key={entry.id} className={`border border-gray-100 rounded-lg p-4 ${entry.itemType === 'bend' ? 'bg-purple-50' : 'bg-gray-50'}`}>
                 <div className="flex justify-between items-start mb-2">
-                  <h4 className="font-medium text-gray-800">Pipe #{index + 1}</h4>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded ${entry.itemType === 'bend' ? 'bg-purple-200 text-purple-800' : 'bg-blue-200 text-blue-800'}`}>
+                      {entry.itemType === 'bend' ? '🔄 Bend' : '📏 Pipe'}
+                    </span>
+                    <h4 className="font-medium text-gray-800">Item #{index + 1}</h4>
+                  </div>
                   <span className="text-sm text-gray-600">
                     {entry.calculation ? 
-                      `${entry.calculation.totalSystemWeight.toFixed(2)} kg` : 
-                      'Not calculated'
+                      entry.itemType === 'bend'
+                        ? `${entry.calculation.totalWeight?.toFixed(2) || 0} kg`
+                        : `${entry.calculation.totalSystemWeight?.toFixed(2) || 0} kg`
+                      : 'Not calculated'
                     }
                   </span>
                 </div>
                 <p className="text-sm text-gray-600 mb-2">{entry.description}</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-500">
-                  <div>NB: {entry.specs.nominalBoreMm}mm</div>
-                  <div>Pressure: {entry.specs.workingPressureBar} bar</div>
-                  <div>Schedule: {entry.specs.scheduleNumber || `${entry.specs.wallThicknessMm}mm WT`}</div>
-                  <div>Length: {entry.specs.quantityValue}m</div>
-                </div>
+                
+                {/* Display fields based on item type */}
+                {entry.itemType === 'bend' ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-500">
+                    <div>NB: {entry.specs.nominalBoreMm}mm</div>
+                    <div>Angle: {entry.specs.bendDegrees}°</div>
+                    <div>Type: {entry.specs.bendType}</div>
+                    <div>Qty: {entry.specs.quantityValue || 1}</div>
+                    {entry.specs.numberOfTangents > 0 && (
+                      <div className="col-span-2">Tangents: {entry.specs.numberOfTangents}</div>
+                    )}
+                    {entry.specs.numberOfStubs > 0 && (
+                      <div className="col-span-2">Stubs: {entry.specs.numberOfStubs}</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-500">
+                    <div>NB: {entry.specs.nominalBoreMm}mm</div>
+                    <div>Pressure: {entry.specs.workingPressureBar} bar</div>
+                    <div>Schedule: {entry.specs.scheduleNumber || `${entry.specs.wallThicknessMm}mm WT`}</div>
+                    <div>Length: {entry.specs.quantityValue}m</div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1576,7 +2317,7 @@ function ReviewSubmitStep({ entries, rfqData, onSubmit, errors, loading }: any) 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center">
               <p className="text-sm font-medium text-blue-700">Total Entries</p>
-              <p className="text-2xl font-bold text-blue-900">{entries.length}</p>
+              <p className="text-2xl font-bold text-blue-900">{allItems.length}</p>
             </div>
             <div className="text-center">
               <p className="text-sm font-medium text-blue-700">Total Length</p>
@@ -1626,7 +2367,9 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
     updateRfqField,
     updateGlobalSpecs,
     addStraightPipeEntry,
+    addBendEntry,
     updateStraightPipeEntry,
+    updateItem,
     removeStraightPipeEntry,
     updateEntryCalculation,
     getTotalWeight,
@@ -1892,82 +2635,212 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
     }
   };
 
+  const handleCalculateBend = async (entryId: string) => {
+    try {
+      const { bendRfqApi } = await import('@/app/lib/api/client');
+      
+      const entry = rfqData.items.find(e => e.id === entryId && e.itemType === 'bend');
+      if (!entry || entry.itemType !== 'bend') return;
+
+      const bendEntry = entry;
+      const calculationData = {
+        nominalBoreMm: bendEntry.specs?.nominalBoreMm || 40,
+        scheduleNumber: bendEntry.specs?.scheduleNumber || '40',
+        bendDegrees: bendEntry.specs?.bendDegrees || 90,
+        bendType: bendEntry.specs?.bendType || '1.5D',
+        quantityValue: bendEntry.specs?.quantityValue || 1,
+        quantityType: 'number_of_items' as const,
+        numberOfTangents: bendEntry.specs?.numberOfTangents || 0,
+        tangentLengths: bendEntry.specs?.tangentLengths || [],
+        workingPressureBar: bendEntry.specs?.workingPressureBar || rfqData.globalSpecs.workingPressureBar || 10,
+        workingTemperatureC: bendEntry.specs?.workingTemperatureC || rfqData.globalSpecs.workingTemperatureC || 20,
+        steelSpecificationId: bendEntry.specs?.steelSpecificationId || rfqData.globalSpecs.steelSpecificationId || 2,
+        useGlobalFlangeSpecs: true,
+      };
+
+      const result = await bendRfqApi.calculate(calculationData);
+
+      updateItem(entryId, {
+        calculation: result,
+      });
+
+    } catch (error) {
+      console.error('Bend calculation failed:', error);
+      alert('Bend calculation failed. Please check your specifications.');
+    }
+  };
+
+  // Unified update handler for both item types
+  const handleUpdateEntry = (id: string, updates: any) => {
+    const entry = rfqData.items.find(e => e.id === id);
+    if (entry?.itemType === 'bend') {
+      updateItem(id, updates);
+    } else {
+      updateStraightPipeEntry(id, updates);
+    }
+  };
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setValidationErrors({});
     
     try {
+      // Use unified items array that includes both straight pipes and bends
+      const allItems = rfqData.items || rfqData.straightPipeEntries || [];
+      
       // Validate we have at least one item
-      if (rfqData.straightPipeEntries.length === 0) {
-        setValidationErrors({ submit: 'Please add at least one pipe item before submitting.' });
+      if (allItems.length === 0) {
+        setValidationErrors({ submit: 'Please add at least one item before submitting.' });
         setIsSubmitting(false);
         return;
       }
 
-      // Import the API client
-      const { rfqApi } = await import('@/app/lib/api/client');
+      // Separate items by type
+      const straightPipeItems = allItems.filter((item: any) => item.itemType !== 'bend');
+      const bendItems = allItems.filter((item: any) => item.itemType === 'bend');
+
+      console.log(`📊 Submitting: ${straightPipeItems.length} straight pipe(s), ${bendItems.length} bend(s)`);
+
+      // Import the API clients
+      const { rfqApi, bendRfqApi } = await import('@/app/lib/api/client');
       
-      // For now, we'll submit each item as a separate RFQ
-      // In the future, this can be enhanced to create one RFQ with multiple items
       const results = [];
       
-      for (let i = 0; i < rfqData.straightPipeEntries.length; i++) {
-        const entry = rfqData.straightPipeEntries[i];
+      // ========== PROCESS ALL STRAIGHT PIPES ==========
+      if (straightPipeItems.length > 0) {
+        console.log(`📏 Processing ${straightPipeItems.length} straight pipe(s)...`);
         
-        // Validate entry has calculation results
-        if (!entry.calculation) {
-          setValidationErrors({ 
-            submit: `Item #${i + 1} (${entry.description}) has not been calculated. Please click "Calculate All" before submitting.` 
-          });
-          setIsSubmitting(false);
-          return;
+        for (let i = 0; i < straightPipeItems.length; i++) {
+          const entry = straightPipeItems[i];
+          
+          // Validate entry has calculation results
+          if (!entry.calculation) {
+            setValidationErrors({ 
+              submit: `Straight Pipe #${i + 1} (${entry.description}) has not been calculated. Please calculate all items before submitting.` 
+            });
+            setIsSubmitting(false);
+            return;
+          }
+
+          // Prepare Straight Pipe RFQ payload
+          const rfqPayload = {
+            rfq: {
+              projectName: straightPipeItems.length > 1 
+                ? `${rfqData.projectName} - Straight Pipe ${i + 1}/${straightPipeItems.length}`
+                : rfqData.projectName,
+              description: rfqData.description,
+              customerName: rfqData.customerName,
+              customerEmail: rfqData.customerEmail,
+              customerPhone: rfqData.customerPhone,
+              requiredDate: rfqData.requiredDate,
+              status: 'draft' as const,
+              notes: rfqData.notes,
+            },
+            straightPipe: {
+              nominalBoreMm: (entry.specs as any).nominalBoreMm,
+              scheduleType: (entry.specs as any).scheduleType,
+              scheduleNumber: (entry.specs as any).scheduleNumber,
+              wallThicknessMm: (entry.specs as any).wallThicknessMm,
+              pipeEndConfiguration: (entry.specs as any).pipeEndConfiguration,
+              individualPipeLength: (entry.specs as any).individualPipeLength,
+              lengthUnit: (entry.specs as any).lengthUnit,
+              quantityType: (entry.specs as any).quantityType,
+              quantityValue: (entry.specs as any).quantityValue,
+              workingPressureBar: (entry.specs as any).workingPressureBar,
+              workingTemperatureC: (entry.specs as any).workingTemperatureC,
+              steelSpecificationId: (entry.specs as any).steelSpecificationId,
+              flangeStandardId: (entry.specs as any).flangeStandardId,
+              flangePressureClassId: (entry.specs as any).flangePressureClassId,
+            },
+            itemDescription: entry.description || `Pipe Item ${i + 1}`,
+            itemNotes: entry.notes,
+          };
+
+          console.log(`📏 Submitting Straight Pipe #${i + 1}:`, rfqPayload);
+          
+          // Submit to straight pipe RFQ endpoint
+          const result = await rfqApi.create(rfqPayload);
+          results.push({ ...result, itemType: 'straightPipe' });
+          
+          console.log(`✅ Straight Pipe #${i + 1} submitted successfully:`, result);
         }
-
-        // Prepare the RFQ data
-        const rfqPayload = {
-          rfq: {
-            projectName: rfqData.straightPipeEntries.length > 1 
-              ? `${rfqData.projectName} - Item ${i + 1}/${rfqData.straightPipeEntries.length}`
-              : rfqData.projectName,
-            description: rfqData.description,
-            customerName: rfqData.customerName,
-            customerEmail: rfqData.customerEmail,
-            customerPhone: rfqData.customerPhone,
-            requiredDate: rfqData.requiredDate,
-            status: 'draft' as const,
-            notes: rfqData.notes,
-          },
-          straightPipe: {
-            nominalBoreMm: entry.specs.nominalBoreMm,
-            scheduleType: entry.specs.scheduleType,
-            scheduleNumber: entry.specs.scheduleNumber,
-            wallThicknessMm: entry.specs.wallThicknessMm,
-            pipeEndConfiguration: entry.specs.pipeEndConfiguration,
-            individualPipeLength: entry.specs.individualPipeLength,
-            lengthUnit: entry.specs.lengthUnit,
-            quantityType: entry.specs.quantityType,
-            quantityValue: entry.specs.quantityValue,
-            workingPressureBar: entry.specs.workingPressureBar,
-            workingTemperatureC: entry.specs.workingTemperatureC,
-            steelSpecificationId: entry.specs.steelSpecificationId,
-            flangeStandardId: entry.specs.flangeStandardId,
-            flangePressureClassId: entry.specs.flangePressureClassId,
-          },
-          itemDescription: entry.description || `Item ${i + 1}`,
-          itemNotes: entry.notes,
-        };
-
-        console.log(`Submitting Item #${i + 1}:`, rfqPayload);
+      }
+      
+      // ========== PROCESS ALL BENDS ==========
+      if (bendItems.length > 0) {
+        console.log(`🔄 Processing ${bendItems.length} bend(s)...`);
         
-        // Submit to backend
-        const result = await rfqApi.create(rfqPayload);
-        results.push(result);
-        
-        console.log(`Item #${i + 1} submitted successfully:`, result);
+        for (let i = 0; i < bendItems.length; i++) {
+          const entry = bendItems[i];
+          
+          // Validate entry has calculation results
+          if (!entry.calculation) {
+            setValidationErrors({ 
+              submit: `Bend #${i + 1} (${entry.description}) has not been calculated. Please calculate all items before submitting.` 
+            });
+            setIsSubmitting(false);
+            return;
+          }
+
+          // Validate required bend fields
+          if (!(entry.specs as any).nominalBoreMm || !(entry.specs as any).scheduleNumber || !(entry.specs as any).bendType || !(entry.specs as any).bendDegrees) {
+            setValidationErrors({ 
+              submit: `Bend #${i + 1} is missing required fields. Please complete all bend specifications.` 
+            });
+            setIsSubmitting(false);
+            return;
+          }
+          
+          // Prepare Bend RFQ payload
+          const bendPayload = {
+            rfq: {
+              projectName: bendItems.length > 1 
+                ? `${rfqData.projectName} - Bend ${i + 1}/${bendItems.length}`
+                : rfqData.projectName,
+              description: rfqData.description,
+              customerName: rfqData.customerName,
+              customerEmail: rfqData.customerEmail,
+              customerPhone: rfqData.customerPhone,
+              requiredDate: rfqData.requiredDate,
+              status: 'draft' as const,
+              notes: rfqData.notes,
+            },
+            bend: {
+              nominalBoreMm: (entry.specs as any).nominalBoreMm!,
+              scheduleNumber: (entry.specs as any).scheduleNumber!,
+              bendType: (entry.specs as any).bendType!,
+              bendDegrees: (entry.specs as any).bendDegrees!,
+              numberOfTangents: (entry.specs as any).numberOfTangents || 0,
+              tangentLengths: (entry.specs as any).tangentLengths || [],
+              quantityType: 'number_of_items' as const,
+              quantityValue: (entry.specs as any).quantityValue || 1,
+              workingPressureBar: (entry.specs as any).workingPressureBar || rfqData.globalSpecs?.workingPressureBar || 10,
+              workingTemperatureC: (entry.specs as any).workingTemperatureC || rfqData.globalSpecs?.workingTemperatureC || 20,
+              steelSpecificationId: (entry.specs as any).steelSpecificationId || rfqData.globalSpecs?.steelSpecificationId || 2,
+              flangeStandardId: (entry.specs as any).flangeStandardId || rfqData.globalSpecs?.flangeStandardId || 1,
+              flangePressureClassId: (entry.specs as any).flangePressureClassId || rfqData.globalSpecs?.flangePressureClassId || 1,
+            },
+            itemDescription: entry.description || `Bend Item ${i + 1}`,
+            itemNotes: entry.notes,
+          };
+
+          console.log(`🔄 Submitting Bend #${i + 1}:`, bendPayload);
+          
+          // Submit to bend RFQ endpoint
+          const result = await bendRfqApi.create(bendPayload);
+          results.push({ ...result, itemType: 'bend' });
+          
+          console.log(`✅ Bend #${i + 1} submitted successfully:`, result);
+        }
       }
 
       // All items submitted successfully
-      alert(`✅ Success! ${results.length} RFQ${results.length > 1 ? 's' : ''} created successfully!\n\n${results.map((r, i) => `Item ${i + 1}: RFQ #${r.rfq?.rfqNumber || r.rfq?.id || 'Created'}`).join('\n')}`);
+      const itemSummary = results.map((r) => {
+        const itemType = r.itemType === 'bend' ? '🔄 Bend' : '📏 Pipe';
+        return `${itemType}: RFQ #${r.rfq?.rfqNumber || r.rfq?.id || 'Created'}`;
+      }).join('\n');
+      
+      alert(`✅ Success! ${results.length} RFQ${results.length > 1 ? 's' : ''} created successfully!\n\n${itemSummary}`);
       
       // Call the success callback with the first RFQ ID
       onSuccess(results[0]?.rfq?.id || 'success');
@@ -1994,7 +2867,7 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
   const steps = [
     { number: 1, title: 'Project/RFQ Details', description: 'Basic project and customer information' },
     { number: 2, title: 'Specifications', description: 'Working conditions and material specs' },
-    { number: 3, title: 'Item Upload', description: 'Pipe details and quantities' },
+    { number: 3, title: 'Items', description: 'Add pipes, bends, and fittings' },
     { number: 4, title: 'Review & Submit', description: 'Final review and submission' }
   ];
 
@@ -2022,13 +2895,15 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
       case 3:
         return (
           <ItemUploadStep
-            entries={rfqData.straightPipeEntries}
+            entries={rfqData.items.length > 0 ? rfqData.items : rfqData.straightPipeEntries}
             globalSpecs={rfqData.globalSpecs}
             masterData={masterData}
             onAddEntry={addStraightPipeEntry}
-            onUpdateEntry={updateStraightPipeEntry}
+            onAddBendEntry={addBendEntry}
+            onUpdateEntry={handleUpdateEntry}
             onRemoveEntry={removeStraightPipeEntry}
             onCalculate={handleCalculateAll}
+            onCalculateBend={handleCalculateBend}
             errors={validationErrors}
             loading={false}
             fetchAvailableSchedules={fetchAvailableSchedules}
@@ -2051,96 +2926,125 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
-          <div className="px-6 py-4 border-b border-gray-200">
+    <div className="min-h-screen bg-gray-100">
+      <div className="flex h-screen">
+        {/* Vertical Side Navigation */}
+        <div className="w-72 bg-white border-r border-gray-200 flex flex-col">
+          {/* Header */}
+          <div className="px-5 py-4 border-b border-gray-200">
             <div className="flex justify-between items-center">
-              <h1 className="text-2xl font-bold text-gray-900">
-                Create Straight Pipe RFQ
+              <h1 className="text-lg font-bold text-gray-900">
+                Create RFQ
               </h1>
               <button
                 onClick={onCancel}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 text-xl"
               >
                 ✕
               </button>
             </div>
           </div>
 
-          {/* Progress Indicator */}
-          <div className="px-6 py-4">
-            <div className="flex items-center justify-between">
-              {steps.map((step, index) => (
-                <div key={step.number} className="flex items-center">
+          {/* Vertical Progress Steps */}
+          <div className="flex-1 px-4 py-4 overflow-y-auto">
+            <nav className="space-y-2">
+              {steps.map((step) => (
+                <div
+                  key={step.number}
+                  className={`relative flex items-start p-3 rounded-lg transition-all ${
+                    step.number === currentStep
+                      ? 'bg-blue-50 border-2 border-blue-500'
+                      : step.number < currentStep
+                      ? 'bg-green-50 border-2 border-green-500'
+                      : 'bg-gray-50 border-2 border-gray-200'
+                  }`}
+                >
+                  {/* Step Number/Checkmark */}
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
+                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
                       step.number === currentStep
                         ? 'bg-blue-600 text-white'
                         : step.number < currentStep
                         ? 'bg-green-600 text-white'
-                        : 'bg-gray-200 text-gray-600'
+                        : 'bg-gray-300 text-gray-600'
                     }`}
                   >
                     {step.number < currentStep ? '✓' : step.number}
                   </div>
-                  <div className="ml-3 min-w-0 flex-1">
+
+                  {/* Step Content */}
+                  <div className="ml-4 flex-1">
                     <p
-                      className={`text-sm font-medium ${
-                        step.number <= currentStep ? 'text-gray-900' : 'text-gray-500'
+                      className={`text-sm font-semibold ${
+                        step.number === currentStep
+                          ? 'text-blue-900'
+                          : step.number < currentStep
+                          ? 'text-green-900'
+                          : 'text-gray-600'
                       }`}
                     >
                       {step.title}
                     </p>
-                    <p className="text-xs text-gray-500">{step.description}</p>
-                  </div>
-                  {index < steps.length - 1 && (
-                    <div
-                      className={`hidden sm:block w-16 h-0.5 mx-4 ${
-                        step.number < currentStep ? 'bg-green-600' : 'bg-gray-200'
+                    <p
+                      className={`text-xs mt-0.5 ${
+                        step.number === currentStep
+                          ? 'text-blue-700'
+                          : step.number < currentStep
+                          ? 'text-green-700'
+                          : 'text-gray-500'
                       }`}
-                    />
+                    >
+                      {step.description}
+                    </p>
+                  </div>
+
+                  {/* Active Indicator */}
+                  {step.number === currentStep && (
+                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                    </div>
                   )}
                 </div>
               ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-6 py-8">
-            {isLoadingMasterData ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="flex items-center space-x-3">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <span className="text-gray-600">Loading system data...</span>
-                </div>
-              </div>
-            ) : (
-              renderCurrentStep()
-            )}
+            </nav>
           </div>
 
-          {/* Navigation */}
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between">
+          {/* Navigation Buttons */}
+          <div className="px-4 py-3 border-t border-gray-200 space-y-2">
+            <button
+              onClick={nextStep}
+              disabled={currentStep === 4}
+              className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm transition-colors"
+            >
+              {currentStep === 4 ? 'Final Step' : 'Next Step →'}
+            </button>
             <button
               onClick={prevStep}
               disabled={currentStep === 1}
-              className="px-6 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+              className="w-full px-6 py-3 text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm transition-colors"
             >
-              ← Previous
+              ← Previous Step
             </button>
+          </div>
+        </div>
 
-            {currentStep < 4 ? (
-              <button
-                onClick={nextStep}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
-              >
-                Next →
-              </button>
-            ) : null}
+        {/* Main Content Area - FULL WIDTH */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="px-6 py-5">
+                {isLoadingMasterData ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="flex items-center space-x-3">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      <span className="text-gray-600">Loading system data...</span>
+                    </div>
+                  </div>
+                ) : (
+                  renderCurrentStep()
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
