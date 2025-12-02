@@ -5,6 +5,7 @@ import { CreateStraightPipeRfqDto, StraightPipeCalculationResult } from '@/app/l
 
 export interface StraightPipeEntry {
   id: string;
+  itemType: 'straight_pipe';
   description: string;
   clientItemNumber?: string;
   specs: CreateStraightPipeRfqDto;
@@ -17,6 +18,42 @@ export interface StraightPipeEntry {
   minimumWallThickness?: number;
   availableUpgrades?: any[];
 }
+
+export interface BendStub {
+  nominalBoreMm: number;
+  length: number;
+  flangeSpec: string;
+}
+
+export interface BendEntry {
+  id: string;
+  itemType: 'bend';
+  description: string;
+  clientItemNumber?: string;
+  specs: {
+    nominalBoreMm?: number;
+    scheduleNumber?: string;
+    wallThicknessMm?: number;
+    bendType?: string; // '1.5D', '2D', '3D', '5D'
+    bendDegrees?: number; // 11.25, 22.5, 30, 45, 60, 90
+    numberOfTangents?: number; // 0, 1, 2
+    tangentLengths?: number[]; // Array for tangent lengths
+    numberOfStubs?: number; // 0, 1, 2
+    stubs?: BendStub[]; // Array for stub specifications
+    steelSpecificationId?: number;
+    flangeStandardId?: number;
+    flangePressureClassId?: number;
+    quantityValue: number;
+    quantityType: 'number_of_items';
+    workingPressureBar?: number;
+    workingTemperatureC?: number;
+    useGlobalFlangeSpecs?: boolean;
+  };
+  calculation?: any;
+  notes?: string;
+}
+
+export type PipeItem = StraightPipeEntry | BendEntry;
 
 export interface GlobalSpecs {
   workingPressureBar?: number;
@@ -36,6 +73,8 @@ export interface RfqFormData {
   requiredDate: string;
   notes: string;
   globalSpecs: GlobalSpecs;
+  items: PipeItem[]; // Unified array for all item types
+  // Keep backward compatibility
   straightPipeEntries: StraightPipeEntry[];
 }
 
@@ -65,6 +104,7 @@ export const useRfqForm = () => {
     requiredDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     notes: 'Urgent delivery required by month end',
     globalSpecs: {},
+    items: [],
     straightPipeEntries: [],
   });
 
@@ -78,6 +118,7 @@ export const useRfqForm = () => {
   const addStraightPipeEntry = useCallback((description?: string) => {
     const newEntry: StraightPipeEntry = {
       id: Date.now().toString(),
+      itemType: 'straight_pipe',
       description: description || `${DEFAULT_PIPE_SPECS.nominalBoreMm}NB ${DEFAULT_PIPE_SPECS.scheduleNumber} Straight Pipe for ${DEFAULT_PIPE_SPECS.workingPressureBar} Bar Pipeline`,
       specs: { ...DEFAULT_PIPE_SPECS },
       notes: 'All pipes to be hydrostatically tested before delivery',
@@ -85,11 +126,52 @@ export const useRfqForm = () => {
 
     setRfqData(prev => ({
       ...prev,
+      items: [...prev.items, newEntry],
       straightPipeEntries: [...prev.straightPipeEntries, newEntry],
     }));
 
     return newEntry.id;
   }, []);
+
+  const addBendEntry = useCallback((description?: string) => {
+    const newEntry: BendEntry = {
+      id: Date.now().toString(),
+      itemType: 'bend',
+      description: description || '40NB 90° 1.5D Bend',
+      specs: {
+        nominalBoreMm: 40,
+        scheduleNumber: '40',
+        bendType: '1.5D',
+        bendDegrees: 90,
+        numberOfTangents: 0,
+        tangentLengths: [],
+        numberOfStubs: 0,
+        stubs: [],
+        quantityValue: 1,
+        quantityType: 'number_of_items',
+        workingPressureBar: 16,
+        workingTemperatureC: 120,
+        steelSpecificationId: 2,
+        useGlobalFlangeSpecs: true,
+      },
+      notes: 'Custom bend fabrication required',
+    };
+
+    setRfqData(prev => ({
+      ...prev,
+      items: [...prev.items, newEntry],
+    }));
+
+    return newEntry.id;
+  }, []);
+
+  const addItem = useCallback((itemType: 'straight_pipe' | 'bend', description?: string) => {
+    if (itemType === 'straight_pipe') {
+      return addStraightPipeEntry(description);
+    } else {
+      return addBendEntry(description);
+    }
+  }, [addStraightPipeEntry, addBendEntry]);
 
   const updateStraightPipeEntry = useCallback((
     id: string, 
@@ -97,8 +179,23 @@ export const useRfqForm = () => {
   ) => {
     setRfqData(prev => ({
       ...prev,
+      items: prev.items.map(item =>
+        item.id === id && item.itemType === 'straight_pipe' ? { ...item, ...updates } : item
+      ),
       straightPipeEntries: prev.straightPipeEntries.map(entry =>
         entry.id === id ? { ...entry, ...updates } : entry
+      ),
+    }));
+  }, []);
+
+  const updateItem = useCallback((
+    id: string,
+    updates: Partial<Omit<PipeItem, 'id' | 'itemType'>>
+  ) => {
+    setRfqData(prev => ({
+      ...prev,
+      items: prev.items.map(item =>
+        item.id === id ? { ...item, ...updates } as PipeItem : item
       ),
     }));
   }, []);
@@ -106,6 +203,15 @@ export const useRfqForm = () => {
   const removeStraightPipeEntry = useCallback((id: string) => {
     setRfqData(prev => ({
       ...prev,
+      items: prev.items.filter(item => item.id !== id),
+      straightPipeEntries: prev.straightPipeEntries.filter(entry => entry.id !== id),
+    }));
+  }, []);
+
+  const removeItem = useCallback((id: string) => {
+    setRfqData(prev => ({
+      ...prev,
+      items: prev.items.filter(item => item.id !== id),
       straightPipeEntries: prev.straightPipeEntries.filter(entry => entry.id !== id),
     }));
   }, []);
@@ -152,6 +258,7 @@ export const useRfqForm = () => {
       requiredDate: '',
       notes: '',
       globalSpecs: {},
+      items: [],
       straightPipeEntries: [],
     });
   }, []);
@@ -162,10 +269,16 @@ export const useRfqForm = () => {
     rfqData,
     updateRfqField,
     updateGlobalSpecs,
+    // Legacy methods for backward compatibility
     addStraightPipeEntry,
     updateStraightPipeEntry,
     removeStraightPipeEntry,
     updateEntryCalculation,
+    // New unified methods
+    addItem,
+    addBendEntry,
+    updateItem,
+    removeItem,
     getTotalWeight,
     getTotalValue,
     nextStep,
