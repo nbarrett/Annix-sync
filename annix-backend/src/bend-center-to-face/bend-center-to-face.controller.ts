@@ -34,6 +34,20 @@ export class BendCenterToFaceController {
     return this.bendCenterToFaceService.getNominalBoresForBendType(bendType);
   }
 
+  @Get('degrees/:bendType')
+  getDegreesForBendType(
+    @Param('bendType') bendType: string,
+    @Query('nominalBoreMm') nominalBoreMm?: string,
+  ): Promise<number[]> {
+    const nb = nominalBoreMm ? parseInt(nominalBoreMm, 10) : undefined;
+    return this.bendCenterToFaceService.getDegreesForBendType(bendType, nb);
+  }
+
+  @Get('options/:bendType')
+  getOptionsForBendType(@Param('bendType') bendType: string) {
+    return this.bendCenterToFaceService.getOptionsForBendType(bendType);
+  }
+
   @Get('lookup')
   findByCriteria(
     @Query('bendType') bendType: string,

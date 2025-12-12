@@ -523,7 +523,7 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
   );
 }
 
-function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBendEntry, onUpdateEntry, onRemoveEntry, onCalculate, onCalculateBend, errors, loading, fetchAvailableSchedules, availableSchedulesMap }: any) {
+function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBendEntry, onUpdateEntry, onRemoveEntry, onCalculate, onCalculateBend, errors, loading, fetchAvailableSchedules, availableSchedulesMap, fetchBendOptions, bendOptionsCache }: any) {
   const [isCalculating, setIsCalculating] = useState(false);
 
   // Use nominal bores from master data, fallback to hardcoded values
@@ -854,8 +854,42 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
                     >
                       <option value="">Select NB</option>
-                      <option value="40">40 NB</option>
-                      <option value="50">50 NB</option>
+                      {entry.specs?.bendType && bendOptionsCache[entry.specs.bendType]?.nominalBores?.length > 0 ? (
+                        // Use dynamic options from API if available
+                        bendOptionsCache[entry.specs.bendType].nominalBores.map((nb: number) => (
+                          <option key={nb} value={nb}>{nb} NB</option>
+                        ))
+                      ) : (
+                        // Fallback to static options
+                        <>
+                          <option value="40">40 NB</option>
+                          <option value="50">50 NB</option>
+                          <option value="65">65 NB</option>
+                          <option value="80">80 NB</option>
+                          <option value="100">100 NB</option>
+                          <option value="125">125 NB</option>
+                          <option value="150">150 NB</option>
+                          <option value="200">200 NB</option>
+                          <option value="250">250 NB</option>
+                          <option value="300">300 NB</option>
+                          <option value="350">350 NB</option>
+                          <option value="400">400 NB</option>
+                          <option value="450">450 NB</option>
+                          <option value="500">500 NB</option>
+                          <option value="550">550 NB</option>
+                          <option value="600">600 NB</option>
+                          <option value="650">650 NB</option>
+                          <option value="700">700 NB</option>
+                          <option value="750">750 NB</option>
+                          <option value="800">800 NB</option>
+                          <option value="900">900 NB</option>
+                          <option value="1000">1000 NB</option>
+                          <option value="1050">1050 NB</option>
+                          <option value="1100">1100 NB</option>
+                          <option value="1150">1150 NB</option>
+                          <option value="1200">1200 NB</option>
+                        </>
+                      )}
                     </select>
                   </div>
 
@@ -895,7 +929,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                     </label>
                     <select
                       value={entry.specs?.bendType || ''}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const bendType = e.target.value;
                         const updatedEntry = {
                           ...entry,
@@ -904,6 +938,12 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                         // Auto-update description
                         updatedEntry.description = generateItemDescription(updatedEntry);
                         onUpdateEntry(entry.id, updatedEntry);
+                        
+                        // Fetch available options for this bend type
+                        if (bendType) {
+                          await fetchBendOptions(bendType);
+                        }
+                        
                         // Auto-calculate if all required fields are filled
                         if (bendType && entry.specs?.nominalBoreMm && entry.specs?.scheduleNumber && entry.specs?.bendDegrees) {
                           setTimeout(() => onCalculateBend && onCalculateBend(entry.id), 100);
@@ -912,6 +952,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
                     >
                       <option value="">Select Bend Type</option>
+                      <option value="1D">1D</option>
                       <option value="1.5D">1.5D</option>
                       <option value="2D">2D</option>
                       <option value="3D">3D</option>
@@ -942,12 +983,87 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
                     >
                       <option value="">Select Angle</option>
-                      <option value="11.25">11.25°</option>
-                      <option value="22.5">22.5°</option>
-                      <option value="30">30°</option>
-                      <option value="45">45°</option>
-                      <option value="60">60°</option>
-                      <option value="90">90°</option>
+                      {entry.specs?.bendType && bendOptionsCache[entry.specs.bendType]?.degrees?.length > 0 ? (
+                        // Use dynamic options from API if available
+                        bendOptionsCache[entry.specs.bendType].degrees.map((deg: number) => (
+                          <option key={deg} value={deg}>{deg}°</option>
+                        ))
+                      ) : (
+                        // Fallback to static options
+                        <>
+                          <option value="1">1°</option>
+                          <option value="2">2°</option>
+                          <option value="3">3°</option>
+                          <option value="4">4°</option>
+                          <option value="5">5°</option>
+                          <option value="6">6°</option>
+                          <option value="7">7°</option>
+                          <option value="8">8°</option>
+                          <option value="9">9°</option>
+                          <option value="10">10°</option>
+                          <option value="11.25">11.25°</option>
+                          <option value="12.5">12.5°</option>
+                          <option value="15">15°</option>
+                          <option value="17.5">17.5°</option>
+                          <option value="20">20°</option>
+                          <option value="22.5">22.5°</option>
+                          <option value="25">25°</option>
+                          <option value="27.5">27.5°</option>
+                          <option value="30">30°</option>
+                          <option value="31">31°</option>
+                          <option value="32">32°</option>
+                          <option value="32.5">32.5°</option>
+                          <option value="33">33°</option>
+                          <option value="34">34°</option>
+                          <option value="35">35°</option>
+                          <option value="37.5">37.5°</option>
+                          <option value="40">40°</option>
+                          <option value="42.5">42.5°</option>
+                          <option value="45">45°</option>
+                          <option value="47.5">47.5°</option>
+                          <option value="50">50°</option>
+                          <option value="51">51°</option>
+                          <option value="52">52°</option>
+                          <option value="53">53°</option>
+                          <option value="54">54°</option>
+                          <option value="55">55°</option>
+                          <option value="56">56°</option>
+                          <option value="57">57°</option>
+                          <option value="58">58°</option>
+                          <option value="59">59°</option>
+                          <option value="60">60°</option>
+                          <option value="61">61°</option>
+                          <option value="62">62°</option>
+                          <option value="63">63°</option>
+                          <option value="64">64°</option>
+                          <option value="65">65°</option>
+                          <option value="66">66°</option>
+                          <option value="67">67°</option>
+                          <option value="68">68°</option>
+                          <option value="69">69°</option>
+                          <option value="70">70°</option>
+                          <option value="71">71°</option>
+                          <option value="72">72°</option>
+                          <option value="73">73°</option>
+                          <option value="74">74°</option>
+                          <option value="75">75°</option>
+                          <option value="76">76°</option>
+                          <option value="77">77°</option>
+                          <option value="78">78°</option>
+                          <option value="79">79°</option>
+                          <option value="80">80°</option>
+                          <option value="81">81°</option>
+                          <option value="82">82°</option>
+                          <option value="83">83°</option>
+                          <option value="84">84°</option>
+                          <option value="85">85°</option>
+                          <option value="86">86°</option>
+                          <option value="87">87°</option>
+                          <option value="88">88°</option>
+                          <option value="89">89°</option>
+                          <option value="90">90°</option>
+                        </>
+                      )}
                     </select>
                   </div>
 
@@ -2391,6 +2507,8 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
   const [availableSchedulesMap, setAvailableSchedulesMap] = useState<Record<string, any[]>>({});
   // Store available pressure classes for selected standard
   const [availablePressureClasses, setAvailablePressureClasses] = useState<any[]>([]);
+  // Store dynamic bend options per bend type
+  const [bendOptionsCache, setBendOptionsCache] = useState<Record<string, { nominalBores: number[]; degrees: number[] }>>({});
 
   // Load master data from API
   useEffect(() => {
@@ -2504,6 +2622,30 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
         ...prev,
         [entryId]: []
       }));
+    }
+  };
+
+  // Fetch bend options (nominal bores and degrees) for a bend type
+  const fetchBendOptions = async (bendType: string) => {
+    // Return cached data if available
+    if (bendOptionsCache[bendType]) {
+      return bendOptionsCache[bendType];
+    }
+
+    try {
+      const { masterDataApi } = await import('@/app/lib/api/client');
+      const options = await masterDataApi.getBendOptions(bendType);
+      
+      // Cache the result
+      setBendOptionsCache(prev => ({
+        ...prev,
+        [bendType]: options
+      }));
+      
+      return options;
+    } catch (error) {
+      console.error(`Error fetching bend options for ${bendType}:`, error);
+      return { nominalBores: [], degrees: [] };
     }
   };
 
@@ -2908,6 +3050,8 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
             loading={false}
             fetchAvailableSchedules={fetchAvailableSchedules}
             availableSchedulesMap={availableSchedulesMap}
+            fetchBendOptions={fetchBendOptions}
+            bendOptionsCache={bendOptionsCache}
           />
         );
       case 4:

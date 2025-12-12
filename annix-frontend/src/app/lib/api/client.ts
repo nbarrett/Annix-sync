@@ -443,6 +443,19 @@ class ApiClient {
     return this.request<string[]>('/bend-center-to-face/bend-types');
   }
 
+  async getNominalBoresForBendType(bendType: string): Promise<number[]> {
+    return this.request<number[]>(`/bend-center-to-face/nominal-bores/${bendType}`);
+  }
+
+  async getDegreesForBendType(bendType: string, nominalBoreMm?: number): Promise<number[]> {
+    const query = nominalBoreMm ? `?nominalBoreMm=${nominalBoreMm}` : '';
+    return this.request<number[]>(`/bend-center-to-face/degrees/${bendType}${query}`);
+  }
+
+  async getBendOptions(bendType: string): Promise<{ nominalBores: number[]; degrees: number[] }> {
+    return this.request<{ nominalBores: number[]; degrees: number[] }>(`/bend-center-to-face/options/${bendType}`);
+  }
+
   async getBendCenterToFace(bendType: string, nominalBoreMm: number, degrees: number): Promise<any> {
     return this.request(`/bend-center-to-face/lookup?bendType=${bendType}&nominalBoreMm=${nominalBoreMm}&degrees=${degrees}`);
   }
@@ -496,6 +509,9 @@ export const masterDataApi = {
   // Bend calculations  
   calculateBendSpecifications: (params: any) => apiClient.calculateBendSpecifications(params),
   getBendTypes: () => apiClient.getBendTypes(),
+  getBendNominalBores: (bendType: string) => apiClient.getNominalBoresForBendType(bendType),
+  getBendDegrees: (bendType: string, nominalBoreMm?: number) => apiClient.getDegreesForBendType(bendType, nominalBoreMm),
+  getBendOptions: (bendType: string) => apiClient.getBendOptions(bendType),
   getBendCenterToFace: (bendType: string, nominalBoreMm: number, degrees: number) => 
     apiClient.getBendCenterToFace(bendType, nominalBoreMm, degrees),
   getWeldTypes: () => apiClient.getWeldTypes(),
