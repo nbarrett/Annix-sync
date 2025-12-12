@@ -38,7 +38,7 @@ interface MasterData {
 // Pipe end configuration options with weld counts
 const PIPE_END_OPTIONS = [
   { value: 'PE', label: 'PE - Plain ended (0 welds)', weldCount: 0 },
-  { value: 'FOE', label: 'FOE - Flanged one end (0 welds)', weldCount: 0 },
+  { value: 'FOE', label: 'FOE - Flanged one end (1 weld)', weldCount: 1 },
   { value: 'FBE', label: 'FBE - Flanged both ends (2 flange welds)', weldCount: 2 },
   { value: 'FOE_LF', label: 'FOE + L/F - Flanged one end + loose flange (1 flange weld)', weldCount: 1 },
   { value: 'FOE_RF', label: 'FOE + R/F - Flanged one end + rotating flange (2 flange welds)', weldCount: 2 },
@@ -347,13 +347,16 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
       <div className="space-y-8">
         {/* Working Conditions */}
         <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Working Conditions</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">
+            Working Conditions
+            <span className="ml-2 text-sm font-normal text-gray-600">(Optional - Can be specified per item)</span>
+          </h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Working Pressure */}
             <div>
               <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Working Pressure (bar) *
+                Working Pressure (bar)
               </label>
               <select
                 value={globalSpecs?.workingPressureBar || ''}
@@ -362,7 +365,6 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
                   workingPressureBar: e.target.value ? Number(e.target.value) : undefined
                 })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                required
               >
                 <option value="">Select pressure...</option>
                 {workingPressures.map((pressure) => (
@@ -371,15 +373,15 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
                   </option>
                 ))}
               </select>
-              {errors.workingPressure && (
-                <p className="mt-2 text-sm text-red-600">{errors.workingPressure}</p>
-              )}
+              <p className="mt-1 text-xs text-gray-500">
+                Leave empty to specify per item. Item-level values take priority.
+              </p>
             </div>
 
             {/* Working Temperature */}
             <div>
               <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Working Temperature (°C) *
+                Working Temperature (°C)
               </label>
               <select
                 value={globalSpecs?.workingTemperatureC || ''}
@@ -388,7 +390,6 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
                   workingTemperatureC: e.target.value ? Number(e.target.value) : undefined
                 })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                required
               >
                 <option value="">Select temperature...</option>
                 {workingTemperatures.map((temp) => (
@@ -397,9 +398,9 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
                   </option>
                 ))}
               </select>
-              {errors.workingTemperature && (
-                <p className="mt-2 text-sm text-red-600">{errors.workingTemperature}</p>
-              )}
+              <p className="mt-1 text-xs text-gray-500">
+                Leave empty to specify per item. Item-level values take priority.
+              </p>
             </div>
           </div>
         </div>
@@ -1107,6 +1108,59 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                   </div>
                 </div>
 
+                {/* Operating Conditions - Item Level */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-amber-900 mb-3">Operating Conditions</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-900 mb-1">
+                        Working Pressure (bar) *
+                      </label>
+                      <input
+                        type="number"
+                        value={entry.specs?.workingPressureBar || ''}
+                        onChange={(e) => {
+                          const pressure = parseFloat(e.target.value) || 10;
+                          onUpdateEntry(entry.id, {
+                            specs: { ...entry.specs, workingPressureBar: pressure }
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 text-gray-900"
+                        min="0"
+                        step="0.1"
+                        placeholder="10"
+                      />
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Used to auto-select flange pressure class
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-900 mb-1">
+                        Working Temperature (°C) *
+                      </label>
+                      <input
+                        type="number"
+                        value={entry.specs?.workingTemperatureC || ''}
+                        onChange={(e) => {
+                          const temperature = parseFloat(e.target.value) || 20;
+                          onUpdateEntry(entry.id, {
+                            specs: { ...entry.specs, workingTemperatureC: temperature }
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 text-gray-900"
+                        min="-200"
+                        max="1000"
+                        step="1"
+                        placeholder="20"
+                      />
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Operating temperature for specification selection
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Tangents Section */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1415,36 +1469,56 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                   </div>
                 </div>
 
-                {/* Working Conditions */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-900 mb-1">
-                      Working Pressure (bar)
-                    </label>
-                    <input
-                      type="number"
-                      value={entry.specs?.workingPressureBar || globalSpecs?.workingPressureBar || ''}
-                      onChange={(e) => onUpdateEntry(entry.id, {
-                        specs: { ...entry.specs, workingPressureBar: parseFloat(e.target.value) || 10 }
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
-                      placeholder="e.g., 16"
-                    />
-                  </div>
+                {/* Operating Conditions - Item Level */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-amber-900 mb-3">Operating Conditions</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-900 mb-1">
+                        Working Pressure (bar) *
+                      </label>
+                      <input
+                        type="number"
+                        value={entry.specs?.workingPressureBar || ''}
+                        onChange={(e) => {
+                          const pressure = parseFloat(e.target.value) || 10;
+                          onUpdateEntry(entry.id, {
+                            specs: { ...entry.specs, workingPressureBar: pressure }
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 text-gray-900"
+                        min="0"
+                        step="0.1"
+                        placeholder="10"
+                      />
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Used to auto-select flange pressure class
+                      </p>
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-900 mb-1">
-                      Working Temperature (°C)
-                    </label>
-                    <input
-                      type="number"
-                      value={entry.specs?.workingTemperatureC || globalSpecs?.workingTemperatureC || ''}
-                      onChange={(e) => onUpdateEntry(entry.id, {
-                        specs: { ...entry.specs, workingTemperatureC: parseFloat(e.target.value) || 20 }
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
-                      placeholder="e.g., 120"
-                    />
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-900 mb-1">
+                        Working Temperature (°C) *
+                      </label>
+                      <input
+                        type="number"
+                        value={entry.specs?.workingTemperatureC || ''}
+                        onChange={(e) => {
+                          const temperature = parseFloat(e.target.value) || 20;
+                          onUpdateEntry(entry.id, {
+                            specs: { ...entry.specs, workingTemperatureC: temperature }
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 text-gray-900"
+                        min="-200"
+                        max="1000"
+                        step="1"
+                        placeholder="20"
+                      />
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Operating temperature for specification selection
+                      </p>
+                    </div>
                   </div>
                 </div>
 
