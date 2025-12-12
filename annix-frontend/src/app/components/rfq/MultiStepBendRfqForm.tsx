@@ -136,6 +136,66 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
     }
   };
 
+  // Helper function to recommend pressure class based on working pressure (in bar)
+  const getRecommendedPressureClass = (workingPressureBar: number, pressureClasses: any[]) => {
+    if (!workingPressureBar || !pressureClasses.length) return null;
+
+    // Extract numeric value from designation
+    const classesWithRating = pressureClasses.map(pc => {
+      const match = pc.designation?.match(/^(\d+)/);
+      const rating = match ? parseInt(match[1]) : 0;
+      return { ...pc, rating };
+    }).filter(pc => pc.rating > 0);
+
+    if (classesWithRating.length === 0) return null;
+
+    // Sort by rating ascending
+    classesWithRating.sort((a, b) => a.rating - b.rating);
+
+    // Find the lowest rating that meets or exceeds the working pressure
+    // Simplified: rating / 14.5 ≈ bar (rough approximation)
+    const recommended = classesWithRating.find(pc => (pc.rating / 14.5) >= workingPressureBar);
+    
+    return recommended || classesWithRating[classesWithRating.length - 1]; // Return highest if none match
+  };
+
+  // Auto-select flange specifications based on item-level operating conditions
+  const autoSelectFlangeSpecs = async (entryId: string, workingPressureBar: number, flangeStandardId?: number) => {
+    if (!workingPressureBar || !flangeStandardId) return;
+
+    try {
+      // Fetch pressure classes for the standard and get recommendation
+      const classes = await masterDataApi.getFlangePressureClassesByStandard(flangeStandardId);
+      
+      if (classes.length > 0) {
+        const recommended = getRecommendedPressureClass(workingPressureBar, classes);
+        
+        if (recommended) {
+          // Update the entry with recommended pressure class
+          setFormData(prev => ({
+            ...prev,
+            bendEntries: prev.bendEntries.map(entry =>
+              entry.id === entryId
+                ? {
+                    ...entry,
+                    specs: {
+                      ...entry.specs,
+                      flangePressureClassId: recommended.id,
+                      autoSelectedPressureClass: true
+                    }
+                  }
+                : entry
+            )
+          }));
+
+          console.log(`Auto-selected pressure class ${recommended.designation} for ${workingPressureBar} bar`);
+        }
+      }
+    } catch (error) {
+      console.error('Error auto-selecting flange specs:', error);
+    }
+  };
+
   const updateField = (field: keyof BendRfqFormData, value: any) => {
     setFormData(prev => ({
       ...prev,
@@ -849,11 +909,19 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
                         <input
                           type="number"
                           value={entry.specs.workingPressureBar || ''}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const pressure = parseFloat(e.target.value) || 10;
                             updateBendEntry(entry.id, {
                               specs: { ...entry.specs, workingPressureBar: pressure }
                             });
+                            
+                            // Auto-select flange specifications based on pressure
+                            const flangeStandardId = entry.specs.flangeStandardId || formData.globalSpecs.flangeStandardId;
+                            if (pressure > 0 && flangeStandardId) {
+                              setTimeout(() => {
+                                autoSelectFlangeSpecs(entry.id, pressure, flangeStandardId);
+                              }, 300);
+                            }
                           }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 text-gray-900"
                           min="0"
@@ -861,7 +929,7 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
                           placeholder="10"
                         />
                         <p className="mt-0.5 text-xs text-gray-500">
-                          Used to auto-select flange pressure class
+                          Auto-selects recommended flange pressure class
                         </p>
                       </div>
 
