@@ -4,6 +4,7 @@ import { PipeDimension } from './entities/pipe-dimension.entity';
 import { CreatePipeDimensionDto } from './dto/create-pipe-dimension.dto';
 import { ApiBody, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { UpdatePipeDimensionDto } from './dto/update-pipe-dimension.dto';
+import { RecommendPipeSpecsDto } from './dto/recommend-pipe-specs.dto';
 
 @Controller('pipe-dimensions')
 export class PipeDimensionController {
@@ -46,18 +47,7 @@ export class PipeDimensionController {
 
   @Post('recommend')
   @ApiOperation({ summary: 'Get recommended pipe specifications based on working conditions' })
-  @ApiBody({ 
-    schema: {
-      type: 'object',
-      properties: {
-        nominalBore: { type: 'number', description: 'Nominal bore in mm' },
-        workingPressure: { type: 'number', description: 'Working pressure in MPa' },
-        temperature: { type: 'number', description: 'Working temperature in Celsius', default: 20 },
-        steelSpecId: { type: 'number', description: 'Steel specification ID (optional)' }
-      },
-      required: ['nominalBore', 'workingPressure']
-    }
-  })
+  @ApiBody({ type: RecommendPipeSpecsDto })
   @ApiResponse({ 
     status: 200, 
     description: 'Recommended pipe specifications',
@@ -71,17 +61,12 @@ export class PipeDimensionController {
       }
     }
   })
-  async getRecommendations(@Body() body: {
-    nominalBore: number;
-    workingPressure: number;
-    temperature?: number;
-    steelSpecId?: number;
-  }) {
+  async getRecommendations(@Body() dto: RecommendPipeSpecsDto) {
     return this.pipeDimensionService.getRecommendedSpecs(
-      body.nominalBore,
-      body.workingPressure,
-      body.temperature || 20,
-      body.steelSpecId
+      dto.nominalBore,
+      dto.workingPressure,
+      dto.temperature || 20,
+      dto.steelSpecId
     );
   }
 
