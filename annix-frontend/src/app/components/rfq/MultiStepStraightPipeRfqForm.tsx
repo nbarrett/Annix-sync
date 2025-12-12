@@ -524,7 +524,7 @@ function SpecificationsStep({ globalSpecs, onUpdateGlobalSpecs, masterData, erro
   );
 }
 
-function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBendEntry, onUpdateEntry, onRemoveEntry, onCalculate, onCalculateBend, errors, loading, fetchAvailableSchedules, availableSchedulesMap, fetchBendOptions, bendOptionsCache }: any) {
+function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBendEntry, onUpdateEntry, onRemoveEntry, onCalculate, onCalculateBend, errors, loading, fetchAvailableSchedules, availableSchedulesMap, fetchBendOptions, bendOptionsCache, autoSelectFlangeSpecs }: any) {
   const [isCalculating, setIsCalculating] = useState(false);
 
   // Use nominal bores from master data, fallback to hardcoded values
@@ -1119,11 +1119,25 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                       <input
                         type="number"
                         value={entry.specs?.workingPressureBar || ''}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const pressure = parseFloat(e.target.value) || 10;
                           onUpdateEntry(entry.id, {
                             specs: { ...entry.specs, workingPressureBar: pressure }
                           });
+                          
+                          // Auto-select flange specifications based on pressure
+                          const flangeStandardId = entry.specs?.flangeStandardId || globalSpecs?.flangeStandardId;
+                          if (pressure > 0 && flangeStandardId && autoSelectFlangeSpecs) {
+                            setTimeout(() => {
+                              autoSelectFlangeSpecs(
+                                entry.id,
+                                'bend',
+                                pressure,
+                                flangeStandardId,
+                                (updates: any) => onUpdateEntry(entry.id, { specs: { ...entry.specs, ...updates } })
+                              );
+                            }, 300);
+                          }
                         }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 text-gray-900"
                         min="0"
@@ -1131,7 +1145,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                         placeholder="10"
                       />
                       <p className="mt-0.5 text-xs text-gray-500">
-                        Used to auto-select flange pressure class
+                        Auto-selects recommended flange pressure class
                       </p>
                     </div>
 
@@ -1431,11 +1445,18 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                     <div>
                       <label className="block text-xs font-semibold text-gray-900 mb-1">
                         Pressure Class
+                        {entry.specs?.autoSelectedPressureClass && (
+                          <span className="ml-2 text-xs text-green-600 font-normal">✓ Auto-selected</span>
+                        )}
                       </label>
                       <select
                         value={entry.specs?.flangePressureClassId || globalSpecs?.flangePressureClassId || ''}
                         onChange={(e) => onUpdateEntry(entry.id, {
-                          specs: { ...entry.specs, flangePressureClassId: parseInt(e.target.value) || undefined }
+                          specs: { 
+                            ...entry.specs, 
+                            flangePressureClassId: parseInt(e.target.value) || undefined,
+                            autoSelectedPressureClass: false // Clear auto-selection flag on manual change
+                          }
                         })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 text-gray-900"
                       >
@@ -1480,11 +1501,25 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                       <input
                         type="number"
                         value={entry.specs?.workingPressureBar || ''}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const pressure = parseFloat(e.target.value) || 10;
                           onUpdateEntry(entry.id, {
                             specs: { ...entry.specs, workingPressureBar: pressure }
                           });
+                          
+                          // Auto-select flange specifications based on pressure
+                          const flangeStandardId = entry.specs?.flangeStandardId || globalSpecs?.flangeStandardId;
+                          if (pressure > 0 && flangeStandardId && autoSelectFlangeSpecs) {
+                            setTimeout(() => {
+                              autoSelectFlangeSpecs(
+                                entry.id,
+                                'straight-pipe',
+                                pressure,
+                                flangeStandardId,
+                                (updates: any) => onUpdateEntry(entry.id, { specs: { ...entry.specs, ...updates } })
+                              );
+                            }, 300);
+                          }
                         }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 text-gray-900"
                         min="0"
@@ -1492,7 +1527,7 @@ function ItemUploadStep({ entries, globalSpecs, masterData, onAddEntry, onAddBen
                         placeholder="10"
                       />
                       <p className="mt-0.5 text-xs text-gray-500">
-                        Used to auto-select flange pressure class
+                        Auto-selects recommended flange pressure class
                       </p>
                     </div>
 
@@ -2723,6 +2758,39 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
     }
   };
 
+  // Auto-select flange specifications based on item-level operating conditions
+  const autoSelectFlangeSpecs = async (
+    entryId: string, 
+    entryType: 'straight-pipe' | 'bend',
+    workingPressureBar: number, 
+    flangeStandardId?: number,
+    updateCallback?: (updates: any) => void
+  ) => {
+    if (!workingPressureBar || !flangeStandardId) return;
+
+    try {
+      // Fetch pressure classes for the standard and get recommendation
+      const { masterDataApi } = await import('@/app/lib/api/client');
+      const classes = await masterDataApi.getFlangePressureClassesByStandard(flangeStandardId);
+      
+      if (classes.length > 0) {
+        const recommended = getRecommendedPressureClass(workingPressureBar, classes);
+        
+        if (recommended && updateCallback) {
+          // Call the update callback with the recommended pressure class
+          updateCallback({
+            flangePressureClassId: recommended.id,
+            autoSelectedPressureClass: true // Flag to show it was auto-selected
+          });
+
+          console.log(`Auto-selected pressure class ${recommended.designation} for ${workingPressureBar} bar`);
+        }
+      }
+    } catch (error) {
+      console.error('Error auto-selecting flange specs:', error);
+    }
+  };
+
   // Refetch available schedules when global steel specification changes
   useEffect(() => {
     const steelSpecId = rfqData.globalSpecs?.steelSpecificationId;
@@ -3126,6 +3194,7 @@ export default function MultiStepStraightPipeRfqForm({ onSuccess, onCancel }: Pr
             availableSchedulesMap={availableSchedulesMap}
             fetchBendOptions={fetchBendOptions}
             bendOptionsCache={bendOptionsCache}
+            autoSelectFlangeSpecs={autoSelectFlangeSpecs}
           />
         );
       case 4:
