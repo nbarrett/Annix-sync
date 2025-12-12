@@ -113,6 +113,30 @@ export class BendCenterToFaceService {
     return result.map(r => r.nominalBoreMm);
   }
 
+  async getDegreesForBendType(bendType: string, nominalBoreMm?: number): Promise<number[]> {
+    const qb = this.bendCenterToFaceRepository
+      .createQueryBuilder('bend')
+      .select('DISTINCT bend.degrees', 'degrees')
+      .where('bend.bendType = :bendType', { bendType });
+
+    if (typeof nominalBoreMm === 'number') {
+      qb.andWhere('bend.nominalBoreMm = :nominalBoreMm', { nominalBoreMm });
+    }
+
+    const result = await qb
+      .orderBy('degrees', 'ASC')
+      .getRawMany();
+
+    return result.map(r => Number(r.degrees));
+  }
+
+  async getOptionsForBendType(bendType: string): Promise<{ nominalBores: number[]; degrees: number[] }> {
+    const nominalBores = await this.getNominalBoresForBendType(bendType);
+    const degrees = await this.getDegreesForBendType(bendType);
+
+    return { nominalBores, degrees };
+  }
+
   async calculateBendSpecifications(params: {
     nominalBoreMm: number;
     wallThicknessMm: number;

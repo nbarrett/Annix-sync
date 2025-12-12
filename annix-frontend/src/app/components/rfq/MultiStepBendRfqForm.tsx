@@ -55,9 +55,7 @@ interface Props {
   onCancel: () => void;
 }
 
-const nominalBores = [40, 50]; // Only these sizes have bend data in the database
-const bendTypes = ['1.5D', '2D', '3D', '5D'];
-const standardAngles = [15, 22.5, 30, 45, 60, 90];
+const bendTypes = ['1D', '1.5D', '2D', '3D', '5D'];
 
 export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
   const [currentStep, setCurrentStep] = useState(1);
@@ -68,6 +66,7 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
     flangeStandards: [],
     pressureClasses: [],
   });
+  const [bendOptionsCache, setBendOptionsCache] = useState<Record<string, { nominalBores: number[]; degrees: number[] }>>({});
 
   const [formData, setFormData] = useState<BendRfqFormData>({
     projectName: 'Bend Pipeline Project',
@@ -113,6 +112,29 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
 
     loadMasterData();
   }, []);
+
+  // Fetch bend options (nominal bores and degrees) for a bend type
+  const fetchBendOptions = async (bendType: string) => {
+    // Return cached data if available
+    if (bendOptionsCache[bendType]) {
+      return bendOptionsCache[bendType];
+    }
+
+    try {
+      const options = await masterDataApi.getBendOptions(bendType);
+      
+      // Cache the result
+      setBendOptionsCache(prev => ({
+        ...prev,
+        [bendType]: options
+      }));
+      
+      return options;
+    } catch (error) {
+      console.error(`Error fetching bend options for ${bendType}:`, error);
+      return { nominalBores: [], degrees: [] };
+    }
+  };
 
   const updateField = (field: keyof BendRfqFormData, value: any) => {
     setFormData(prev => ({
@@ -693,9 +715,17 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                       >
                         <option value="">Select NB</option>
-                        {nominalBores.map(nb => (
-                          <option key={nb} value={nb}>{nb}NB</option>
-                        ))}
+                        {entry.specs.bendType && bendOptionsCache[entry.specs.bendType]?.nominalBores?.length > 0 ? (
+                          // Use dynamic options from API
+                          bendOptionsCache[entry.specs.bendType].nominalBores.map((nb: number) => (
+                            <option key={nb} value={nb}>{nb}NB</option>
+                          ))
+                        ) : (
+                          // Fallback options
+                          [40, 50, 65, 80, 100, 125, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 900, 1000, 1050, 1100, 1150, 1200].map((nb: number) => (
+                            <option key={nb} value={nb}>{nb}NB</option>
+                          ))
+                        )}
                       </select>
                     </div>
 
@@ -727,12 +757,20 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
                       </label>
                       <select
                         value={entry.specs.bendType || ''}
-                        onChange={(e) => updateBendEntry(entry.id, {
-                          specs: {
-                            ...entry.specs,
-                            bendType: e.target.value
+                        onChange={async (e) => {
+                          const bendType = e.target.value;
+                          updateBendEntry(entry.id, {
+                            specs: {
+                              ...entry.specs,
+                              bendType: bendType
+                            }
+                          });
+                          
+                          // Fetch options for this bend type
+                          if (bendType) {
+                            await fetchBendOptions(bendType);
                           }
-                        })}
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                       >
                         <option value="">Select Bend Type</option>
@@ -751,15 +789,23 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
                         onChange={(e) => updateBendEntry(entry.id, {
                           specs: {
                             ...entry.specs,
-                            bendDegrees: parseInt(e.target.value) || undefined
+                            bendDegrees: parseFloat(e.target.value) || undefined
                           }
                         })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                       >
                         <option value="">Select Angle</option>
-                        {standardAngles.map(angle => (
-                          <option key={angle} value={angle}>{angle}°</option>
-                        ))}
+                        {entry.specs.bendType && bendOptionsCache[entry.specs.bendType]?.degrees?.length > 0 ? (
+                          // Use dynamic options from API
+                          bendOptionsCache[entry.specs.bendType].degrees.map((deg: number) => (
+                            <option key={deg} value={deg}>{deg}°</option>
+                          ))
+                        ) : (
+                          // Fallback options
+                          [15, 22.5, 30, 45, 60, 90].map((angle: number) => (
+                            <option key={angle} value={angle}>{angle}°</option>
+                          ))
+                        )}
                       </select>
                     </div>
 
