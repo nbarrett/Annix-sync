@@ -573,9 +573,12 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
         {currentStep === 2 && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Global Specifications</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                Global Specifications
+                <span className="ml-2 text-base font-normal text-gray-600">(Optional - Can be specified per item)</span>
+              </h2>
               <p className="text-gray-600 mb-6">
-                Set default specifications that will apply to all bend items.
+                Set default specifications that will apply to all bend items. Item-level values take priority.
               </p>
             </div>
 
@@ -596,6 +599,9 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
                   min="0"
                   step="0.1"
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Leave empty to specify per item. Item-level values take priority.
+                </p>
               </div>
 
               <div>
@@ -613,6 +619,9 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
                   placeholder="e.g., 120"
                   step="1"
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Leave empty to specify per item. Item-level values take priority.
+                </p>
               </div>
 
               <div>
@@ -827,16 +836,69 @@ export default function MultiStepBendRfqForm({ onSuccess, onCancel }: Props) {
                         placeholder="1"
                       />
                     </div>
+                  </div>
 
-                    <div className="flex items-end">
-                      <button
-                        onClick={() => calculateBend(entry.id)}
-                        disabled={loading}
-                        className="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-                      >
-                        {loading ? 'Calculating...' : 'Calculate'}
-                      </button>
+                  {/* Operating Conditions - Item Level */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+                    <h4 className="text-sm font-semibold text-amber-900 mb-3">Operating Conditions</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-900 mb-1">
+                          Working Pressure (bar) *
+                        </label>
+                        <input
+                          type="number"
+                          value={entry.specs.workingPressureBar || ''}
+                          onChange={(e) => {
+                            const pressure = parseFloat(e.target.value) || 10;
+                            updateBendEntry(entry.id, {
+                              specs: { ...entry.specs, workingPressureBar: pressure }
+                            });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 text-gray-900"
+                          min="0"
+                          step="0.1"
+                          placeholder="10"
+                        />
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          Used to auto-select flange pressure class
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-900 mb-1">
+                          Working Temperature (°C) *
+                        </label>
+                        <input
+                          type="number"
+                          value={entry.specs.workingTemperatureC || ''}
+                          onChange={(e) => {
+                            const temperature = parseFloat(e.target.value) || 20;
+                            updateBendEntry(entry.id, {
+                              specs: { ...entry.specs, workingTemperatureC: temperature }
+                            });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 text-gray-900"
+                          min="-200"
+                          max="1000"
+                          step="1"
+                          placeholder="20"
+                        />
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          Operating temperature for specification selection
+                        </p>
+                      </div>
                     </div>
+                  </div>
+
+                  <div className="flex items-end mt-4">
+                    <button
+                      onClick={() => calculateBend(entry.id)}
+                      disabled={loading}
+                      className="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                    >
+                      {loading ? 'Calculating...' : 'Calculate'}
+                    </button>
                   </div>
 
                   {entry.calculation && (
