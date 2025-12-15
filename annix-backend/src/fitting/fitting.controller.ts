@@ -1,53 +1,77 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { FittingService } from './fitting.service';
-import { CreateFittingDto } from './dto/create-fitting.dto';
-import { UpdateFittingDto } from './dto/update-fitting.dto';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { GetFittingDimensionsDto, FittingStandard, FittingType } from './dto/get-fitting-dimensions.dto';
+import { CalculateFittingDto, FittingCalculationResultDto } from './dto/calculate-fitting.dto';
 
 @ApiTags('fittings')
-@Controller('fitting')
+@Controller('fittings')
 export class FittingController {
   constructor(private readonly fittingService: FittingService) {}
 
-  @Post()
-  @ApiOperation({ summary: 'Create a new fitting' })
-  @ApiResponse({ status: 201, description: 'Successfully created' })
-  @ApiResponse({ status: 400, description: 'Duplicate or invalid data' })
-  create(@Body() createFittingDto: CreateFittingDto) {
-    return this.fittingService.create(createFittingDto);
+  @Post('calculate')
+  @ApiOperation({
+    summary: 'Calculate fitting weight and requirements',
+    description: 'Calculate fitting weight, flange requirements, and welding requirements for SABS62 or SABS719 fittings',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Calculation completed successfully',
+    type: FittingCalculationResultDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Fitting dimensions or pipe specification not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid input data or missing required fields',
+  })
+  @ApiBody({
+    description: 'Fitting specifications for calculation',
+    type: CalculateFittingDto,
+  })
+  async calculateFitting(@Body() dto: CalculateFittingDto): Promise<FittingCalculationResultDto> {
+    return this.fittingService.calculateFitting(dto);
   }
 
-  @Get()
-  @ApiOperation({ summary: 'Get all fittings' })
-  @ApiResponse({ status: 200, description: 'List of fittings retrieved successfully' })
-  findAll() {
-    return this.fittingService.findAll();
+  @Get('dimensions')
+  @ApiOperation({ summary: 'Get fitting dimensions by standard, type, and size' })
+  @ApiResponse({ status: 200, description: 'Returns fitting dimensions' })
+  @ApiResponse({ status: 404, description: 'Fitting not found' })
+  async getFittingDimensions(@Query() dto: GetFittingDimensionsDto) {
+    return this.fittingService.getFittingDimensions(
+      dto.standard,
+      dto.fittingType,
+      dto.nominalDiameterMm,
+      dto.angleRange,
+    );
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a fitting by ID' })
-  @ApiResponse({ status: 200, description: 'Fittings retrieved successfully' })
-  @ApiResponse({ status: 404, description: 'Fittings not found' })
-  @ApiResponse({ status: 400, description: 'Invalid ID parameter' })
-  findOne(@Param('id') id: string) {
-    return this.fittingService.findOne(+id);
+  @Get('types')
+  @ApiOperation({ summary: 'Get available fitting types for a standard' })
+  @ApiResponse({ status: 200, description: 'Returns list of fitting types' })
+  async getAvailableFittingTypes(@Query('standard') standard: FittingStandard) {
+    return this.fittingService.getAvailableFittingTypes(standard);
   }
 
-  @Patch(':id')
-  @ApiOperation({ summary: 'Update a fitting' })
-  @ApiResponse({ status: 200, description: 'Fittings updated successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid request or duplicate fittings' })
-  @ApiResponse({ status: 404, description: 'Fittings not found' })
-  update(@Param('id') id: string, @Body() updateFittingDto: UpdateFittingDto) {
-    return this.fittingService.update(+id, updateFittingDto);
+  @Get('sizes')
+  @ApiOperation({ summary: 'Get available sizes for a fitting type' })
+  @ApiResponse({ status: 200, description: 'Returns list of available sizes' })
+  async getAvailableSizes(
+    @Query('standard') standard: FittingStandard,
+    @Query('fittingType') fittingType: FittingType,
+  ) {
+    return this.fittingService.getAvailableSizes(standard, fittingType);
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete a fitting' })
-  @ApiResponse({ status: 200, description: 'Fittings deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Fittings not found' })
-  @ApiResponse({ status: 400, description: 'Invalid ID parameter' })
-  remove(@Param('id') id: string) {
-    return this.fittingService.remove(+id);
+  @Get('angle-ranges')
+  @ApiOperation({ summary: 'Get available angle ranges for laterals/Y-pieces' })
+  @ApiResponse({ status: 200, description: 'Returns list of angle ranges' })
+  async getAvailableAngleRanges(
+    @Query('fittingType') fittingType: FittingType,
+    @Query('nominalDiameterMm') nominalDiameterMm: number,
+  ) {
+    return this.fittingService.getAvailableAngleRanges(fittingType, nominalDiameterMm);
   }
 }
