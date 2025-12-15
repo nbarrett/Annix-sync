@@ -53,7 +53,34 @@ export interface BendEntry {
   notes?: string;
 }
 
-export type PipeItem = StraightPipeEntry | BendEntry;
+export interface FittingEntry {
+  id: string;
+  itemType: 'fitting';
+  description: string;
+  clientItemNumber?: string;
+  specs: {
+    fittingStandard?: 'SABS62' | 'SABS719'; // SABS62 (standard) or SABS719 (fabricated)
+    fittingType?: string; // EQUAL_TEE, LATERAL, SWEEP_TEE, etc.
+    nominalDiameterMm?: number;
+    scheduleNumber?: string; // Required for SABS719
+    angleRange?: string; // For laterals/Y-pieces: "60-90", "45-59", "30-44"
+    pipeLengthAMm?: number; // Length of pipe A
+    pipeLengthBMm?: number; // Length of pipe B
+    stubLocation?: string; // Location of stub or lateral
+    degrees?: number; // For laterals - actual angle
+    steelSpecificationId?: number;
+    flangeStandardId?: number;
+    flangePressureClassId?: number;
+    quantityValue: number;
+    quantityType: 'number_of_items';
+    workingPressureBar?: number;
+    workingTemperatureC?: number;
+  };
+  calculation?: any;
+  notes?: string;
+}
+
+export type PipeItem = StraightPipeEntry | BendEntry | FittingEntry;
 
 export interface GlobalSpecs {
   workingPressureBar?: number;
@@ -165,13 +192,43 @@ export const useRfqForm = () => {
     return newEntry.id;
   }, []);
 
-  const addItem = useCallback((itemType: 'straight_pipe' | 'bend', description?: string) => {
+  const addFittingEntry = useCallback((description?: string) => {
+    const newEntry: FittingEntry = {
+      id: Date.now().toString(),
+      itemType: 'fitting',
+      description: description || '100NB Equal Tee Fitting',
+      specs: {
+        fittingStandard: 'SABS62',
+        fittingType: 'EQUAL_TEE',
+        nominalDiameterMm: 100,
+        pipeLengthAMm: 1000,
+        pipeLengthBMm: 1000,
+        quantityValue: 1,
+        quantityType: 'number_of_items',
+        workingPressureBar: 16,
+        workingTemperatureC: 20,
+        steelSpecificationId: 2,
+      },
+      notes: 'Fitting with pipe sections',
+    };
+
+    setRfqData(prev => ({
+      ...prev,
+      items: [...prev.items, newEntry],
+    }));
+
+    return newEntry.id;
+  }, []);
+
+  const addItem = useCallback((itemType: 'straight_pipe' | 'bend' | 'fitting', description?: string) => {
     if (itemType === 'straight_pipe') {
       return addStraightPipeEntry(description);
-    } else {
+    } else if (itemType === 'bend') {
       return addBendEntry(description);
+    } else {
+      return addFittingEntry(description);
     }
-  }, [addStraightPipeEntry, addBendEntry]);
+  }, [addStraightPipeEntry, addBendEntry, addFittingEntry]);
 
   const updateStraightPipeEntry = useCallback((
     id: string, 
@@ -277,6 +334,7 @@ export const useRfqForm = () => {
     // New unified methods
     addItem,
     addBendEntry,
+    addFittingEntry,
     updateItem,
     removeItem,
     getTotalWeight,

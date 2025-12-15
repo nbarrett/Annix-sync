@@ -468,6 +468,75 @@ class ApiClient {
   async getWeldTypeById(id: number): Promise<WeldType> {
     return this.request<WeldType>(`/weld-type/${id}`);
   }
+
+  // Fitting endpoints
+  async getFittingDimensions(
+    standard: 'SABS62' | 'SABS719',
+    fittingType: string,
+    nominalDiameterMm: number,
+    angleRange?: string
+  ): Promise<any> {
+    const params = new URLSearchParams({
+      standard,
+      fittingType,
+      nominalDiameterMm: nominalDiameterMm.toString(),
+    });
+    if (angleRange) {
+      params.append('angleRange', angleRange);
+    }
+    return this.request(`/fittings/dimensions?${params.toString()}`);
+  }
+
+  async getAvailableFittingTypes(standard: 'SABS62' | 'SABS719'): Promise<string[]> {
+    return this.request<string[]>(`/fittings/types?standard=${standard}`);
+  }
+
+  async getAvailableFittingSizes(standard: 'SABS62' | 'SABS719', fittingType: string): Promise<number[]> {
+    return this.request<number[]>(`/fittings/sizes?standard=${standard}&fittingType=${fittingType}`);
+  }
+
+  async getAvailableAngleRanges(fittingType: string, nominalDiameterMm: number): Promise<string[]> {
+    return this.request<string[]>(`/fittings/angle-ranges?fittingType=${fittingType}&nominalDiameterMm=${nominalDiameterMm}`);
+  }
+
+  async calculateFitting(data: {
+    fittingStandard: 'SABS62' | 'SABS719';
+    fittingType: string;
+    nominalDiameterMm: number;
+    angleRange?: string;
+    pipeLengthAMm?: number;
+    pipeLengthBMm?: number;
+    steelSpecificationId?: number;
+    flangeStandardId?: number;
+    flangePressureClassId?: number;
+    quantityValue: number;
+    scheduleNumber?: string;
+    workingPressureBar?: number;
+    workingTemperatureC?: number;
+  }): Promise<{
+    totalWeight: number;
+    fittingWeight: number;
+    pipeWeight: number;
+    flangeWeight: number;
+    boltWeight: number;
+    nutWeight: number;
+    weldWeight: number;
+    numberOfFlanges: number;
+    numberOfFlangeWelds: number;
+    totalFlangeWeldLength: number;
+    numberOfTeeWelds: number;
+    totalTeeWeldLength: number;
+    outsideDiameterMm: number;
+    wallThicknessMm: number;
+  }> {
+    return this.request('/fittings/calculate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 // Create and export the API client instance
@@ -516,6 +585,17 @@ export const masterDataApi = {
     apiClient.getBendCenterToFace(bendType, nominalBoreMm, degrees),
   getWeldTypes: () => apiClient.getWeldTypes(),
   getWeldTypeById: (id: number) => apiClient.getWeldTypeById(id),
+
+  // Fitting API
+  getFittingDimensions: (standard: 'SABS62' | 'SABS719', fittingType: string, nominalDiameterMm: number, angleRange?: string) =>
+    apiClient.getFittingDimensions(standard, fittingType, nominalDiameterMm, angleRange),
+  getAvailableFittingTypes: (standard: 'SABS62' | 'SABS719') => apiClient.getAvailableFittingTypes(standard),
+  getAvailableFittingSizes: (standard: 'SABS62' | 'SABS719', fittingType: string) => 
+    apiClient.getAvailableFittingSizes(standard, fittingType),
+  getAvailableAngleRanges: (fittingType: string, nominalDiameterMm: number) => 
+    apiClient.getAvailableAngleRanges(fittingType, nominalDiameterMm),
+  calculateFitting: (data: Parameters<typeof apiClient.calculateFitting>[0]) => 
+    apiClient.calculateFitting(data),
 };
 
 export const authApi = {
